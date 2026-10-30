@@ -1,0 +1,305 @@
+"use client";
+
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useWorkspace } from "@/components/workspace-provider";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import UserAvatar from "@/components/user-avatar";
+import { errorMessage, projectColor } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { useMutation, useQuery } from "convex/react";
+import {
+  ChevronDown,
+  Inbox,
+  Kanban,
+  LogOut,
+  Plus,
+  Settings,
+  SquarePen,
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { toast } from "sonner";
+import { z } from "zod";
+
+export default function SidebarNav() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { workspace, workspaces, setWorkspaceId, me, openCreate } = useWorkspace();
+  const projects = useQuery(
+    api.projects.list,
+    workspace ? { workspaceId: workspace._id } : "skip",
+  );
+  const views = useQuery(api.views.list, workspace ? { workspaceId: workspace._id } : "skip");
+  const { signOut } = useAuthActions();
+  const [creating, setCreating] = useState(false);
+
+  async function logout() {
+    await signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 px-3 py-3">
+        <span className="flex size-6 items-center justify-center rounded-md bg-primary text-[11px] font-semibold text-primary-foreground">
+          L
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-1 text-left text-sm font-medium hover:bg-white/5"
+              />
+            }
+          >
+            <span className="truncate">{workspace?.name ?? "Workspace"}</span>
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-56">
+            {workspaces?.map((item) => (
+              <DropdownMenuItem key={item._id} onClick={() => setWorkspaceId(item._id)}>
+                <span className="truncate">{item.name}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => openCreate(projects?.[0] ? { projectId: projects[0]._id } : undefined)}
+        className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground"
+      >
+        <SquarePen className="size-3.5" />
+        New issue
+        <span className="ml-auto font-mono text-[10px]">⌘K</span>
+      </button>
+
+      <nav className="space-y-0.5 px-2">
+        <NavLink href="/" active={pathname === "/"}>
+          <Inbox className="size-3.5" />
+          Inbox
+        </NavLink>
+        <NavLink href="/projects" active={pathname === "/projects"}>
+          <Kanban className="size-3.5" />
+          Projects
+        </NavLink>
+      </nav>
+
+      <div className="mt-4 px-3 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        Projects
+      </div>
+      <div className="mt-1 min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3">
+        <div className="space-y-0.5">
+          {projects?.map((project) => {
+            const href = `/projects/${project._id}`;
+            return (
+              <Link
+                key={project._id}
+                href={href}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                  pathname.startsWith(href) && "bg-white/6 text-foreground",
+                )}
+              >
+                <span
+                  className="size-2 rounded-sm"
+                  style={{ backgroundColor: projectColor(project.key) }}
+                />
+                <span className="truncate">{project.name}</span>
+                <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+                  {project.key}
+                </span>
+              </Link>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground"
+          >
+            <Plus className="size-3.5" />
+            New project
+          </button>
+        </div>
+
+        <div>
+          <div className="px-2 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            Views
+          </div>
+          {views?.map((view) => {
+            const href = `/views/${view._id}`;
+            return (
+              <Link
+                key={view._id}
+                href={href}
+                className={cn(
+                  "flex items-center rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                  pathname === href && "bg-white/6 text-foreground",
+                )}
+              >
+                <span className="truncate">{view.name}</span>
+              </Link>
+            );
+          })}
+          <Link
+            href="/views"
+            className={cn(
+              "flex items-center rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+              pathname === "/views" && "bg-white/6 text-foreground",
+            )}
+          >
+            All views
+          </Link>
+        </div>
+      </div>
+
+      <div className="border-t border-border p-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-white/5"
+              />
+            }
+          >
+            <UserAvatar user={me ?? null} />
+            <span className="min-w-0 flex-1 truncate text-[13px]">
+              {me?.name || me?.email || "Account"}
+            </span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-52">
+            <DropdownMenuItem onClick={() => router.push("/settings")}>
+              <Settings className="size-3.5" />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void logout()}>
+              <LogOut className="size-3.5" />
+              Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {workspace ? (
+        <CreateProjectDialog
+          open={creating}
+          workspaceId={workspace._id}
+          onOpenChange={setCreating}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function NavLink({
+  href,
+  active,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+        active && "bg-white/6 text-foreground",
+      )}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function CreateProjectDialog({
+  open,
+  onOpenChange,
+  workspaceId,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspaceId: Id<"workspaces">;
+}) {
+  const create = useMutation(api.projects.create);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [pending, setPending] = useState(false);
+  const router = useRouter();
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const parsed = zName.safeParse(name);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Enter a name");
+      return;
+    }
+    setPending(true);
+    try {
+      const projectId = await create({
+        workspaceId,
+        name: parsed.data,
+        description,
+      });
+      setName("");
+      setDescription("");
+      onOpenChange(false);
+      router.push(`/projects/${projectId}`);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>New project</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Project name"
+            autoFocus
+          />
+          <Input
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Description"
+          />
+          <DialogFooter>
+            <Button type="submit" disabled={pending}>
+              Create project
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const zName = z.string().trim().min(1, "Enter a project name").max(80, "Name is too long");
