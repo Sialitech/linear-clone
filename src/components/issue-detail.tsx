@@ -3,6 +3,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
+import IssueContextMenu from "@/components/issue-context-menu";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
@@ -88,6 +89,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   }
 
   return (
+    <IssueContextMenu issue={issue}>
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex h-12 items-center gap-3 border-b border-border px-4">
         <Link href={`/projects/${issue.projectId}`} className="font-mono text-xs text-muted-foreground hover:text-foreground">
@@ -263,6 +265,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
         </aside>
       </div>
     </div>
+    </IssueContextMenu>
   );
 }
 

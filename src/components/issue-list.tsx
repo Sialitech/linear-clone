@@ -1,5 +1,6 @@
 "use client";
 
+import IssueContextMenu from "@/components/issue-context-menu";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
@@ -36,8 +37,8 @@ export default function IssueList({
         <span>Due</span>
       </div>
       {rows.map((issue) => (
+        <IssueContextMenu key={issue._id} issue={issue}>
         <Link
-          key={issue._id}
           href={`/issues/${issue._id}`}
           className="grid grid-cols-[88px_minmax(0,1fr)_36px_132px_110px_160px_72px] items-center gap-2 border-b border-border/70 px-4 py-2 text-[13px] hover:bg-white/[0.03]"
         >
@@ -68,6 +69,7 @@ export default function IssueList({
             {issue.dueDate ? formatDue(issue.dueDate) : ""}
           </span>
         </Link>
+        </IssueContextMenu>
       ))}
     </div>
   );
