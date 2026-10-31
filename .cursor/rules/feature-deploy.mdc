@@ -29,6 +29,6 @@ Después de cada push de este flujo, antes de dar la feature por hecha:
 2. Si no hay deployment o sigue en `QUEUED`, `BUILDING` o `INITIALIZING`, espera y vuelve a listar. No cierres el turno mientras siga en curso.
 3. `READY` es éxito. Di la URL del preview.
 4. `ERROR`, `CANCELED` o `BLOCKED` es fallo. Lee los logs de ese deployment, corrige, haz push y repite la comprobación.
-5. Con el MCP de Convex, `status` en la raíz del repo. Confirma que existe el deployment preview de esta rama. Si Vercel está `READY` y Convex no lista ese preview, trátalo como fallo y no lo des por desplegado.
+5. Con el MCP de Convex, `status` en la raíz del repo. Confirma que existe el deployment preview de esta rama. Si el MCP responde que no está autorizado, no inventes la URL de Convex: abre los logs de build de Vercel y comprueba que `npx convex deploy` terminó bien. Si Vercel está `READY` y Convex no lista ese preview, trátalo como fallo y no lo des por desplegado.
 
 En el resumen del turno incluye la rama, el SHA y el estado del deployment de ese SHA.
