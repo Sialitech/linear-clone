@@ -8,6 +8,8 @@ import {
   prioritySchema,
   projectIdSchema,
   userIdSchema,
+  viewGroupSchema,
+  viewOrderSchema,
   viewIdSchema,
   workspaceIdSchema,
   zMutation,
@@ -77,7 +79,7 @@ export const create = zMutation({
     projectId: projectIdSchema.optional(),
     status: issueStatusSchema.optional(),
     priority: prioritySchema.optional(),
-    assigneeMode: assigneeModeSchema,
+    assigneeMode: assigneeModeSchema.optional(),
     assigneeId: userIdSchema.optional(),
     labelId: labelIdSchema.optional(),
   },
@@ -99,7 +101,7 @@ export const create = zMutation({
       name: args.name,
       workspaceId: args.workspaceId,
       ownerId: userId,
-      assigneeMode: args.assigneeMode,
+      assigneeMode: args.assigneeMode ?? "anyone",
       createdAt: Date.now(),
       ...(args.projectId ? { projectId: args.projectId } : {}),
       ...(args.status ? { status: args.status } : {}),
@@ -107,6 +109,66 @@ export const create = zMutation({
       ...(args.assigneeId ? { assigneeId: args.assigneeId } : {}),
       ...(args.labelId ? { labelId: args.labelId } : {}),
     });
+  },
+});
+
+export const update = zMutation({
+  args: {
+    viewId: viewIdSchema,
+    projectId: projectIdSchema.nullable(),
+    status: issueStatusSchema.nullable(),
+    priority: prioritySchema.nullable(),
+    assigneeMode: assigneeModeSchema,
+    assigneeId: userIdSchema.nullable(),
+    labelId: labelIdSchema.nullable(),
+    groupBy: viewGroupSchema.nullable(),
+    subGroupBy: viewGroupSchema.nullable(),
+    orderBy: viewOrderSchema.nullable(),
+  },
+  handler: async (ctx, args) => {
+    const view = await ctx.db.get("views", args.viewId);
+    if (!view) throw new Error("View not found");
+    const { userId, membership } = await requireWorkspaceMember(ctx, view.workspaceId);
+    if (!canManageView(view.ownerId, userId, membership.role)) {
+      throw new Error("You cannot edit this view");
+    }
+    if (args.projectId) {
+      const project = await ctx.db.get("projects", args.projectId);
+      if (!project || project.workspaceId !== view.workspaceId) {
+        throw new Error("Project is not in this workspace");
+      }
+    }
+    if (args.labelId) {
+      const label = await ctx.db.get("labels", args.labelId);
+      if (!label || label.workspaceId !== view.workspaceId) {
+        throw new Error("Label is not in this workspace");
+      }
+    }
+    let assigneeId: Id<"users"> | undefined;
+    if (args.assigneeMode === "user") {
+      if (!args.assigneeId) throw new Error("Choose an assignee");
+      const assigneeIdValue = args.assigneeId;
+      const member = await ctx.db
+        .query("members")
+        .withIndex("by_workspace_and_user", (q) =>
+          q.eq("workspaceId", view.workspaceId).eq("userId", assigneeIdValue),
+        )
+        .unique();
+      if (!member) throw new Error("Assignee is not in this workspace");
+      assigneeId = assigneeIdValue;
+    }
+    await ctx.db.patch("views", view._id, {
+      assigneeMode: args.assigneeMode,
+      projectId: args.projectId ?? undefined,
+      status: args.status ?? undefined,
+      priority: args.priority ?? undefined,
+      assigneeId,
+      labelId: args.labelId ?? undefined,
+      groupBy: args.groupBy ?? undefined,
+      subGroupBy: args.subGroupBy && args.subGroupBy !== args.groupBy ? args.subGroupBy : undefined,
+      orderBy: args.orderBy ?? undefined,
+    });
+    return view._id;
   },
 });
 
