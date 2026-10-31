@@ -1,6 +1,7 @@
 "use client";
 
 import IssueContextMenu from "@/components/issue-context-menu";
+import IssueSelectionBar from "@/components/issue-selection-bar";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
@@ -156,18 +157,10 @@ export default function IssueList({
         );
       })}
       {selectedCount > 0 ? (
-        <div className="sticky bottom-4 z-20 mx-auto mt-3 flex w-fit items-center gap-3 rounded-full border border-border bg-popover px-3 py-1.5 text-sm shadow-lg">
-          <span className="font-medium">
-            {selectedCount} selected
-          </span>
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => setSelection(emptySelection)}
-          >
-            Clear
-          </button>
-        </div>
+        <IssueSelectionBar
+          issueIds={rows.filter((issue) => selected.has(issue._id)).map((issue) => issue._id)}
+          onClear={() => setSelection(emptySelection)}
+        />
       ) : null}
     </div>
   );
