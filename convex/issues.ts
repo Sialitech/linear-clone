@@ -271,6 +271,41 @@ export const inbox = zQuery({
   },
 });
 
+export const mentions = zQuery({
+  args: { workspaceId: workspaceIdSchema },
+  handler: async (ctx, args) => {
+    const { userId } = await requireWorkspaceMember(ctx, args.workspaceId);
+    const rows = await ctx.db
+      .query("mentions")
+      .withIndex("by_mentioned_user", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("mentionedUserId", userId),
+      )
+      .take(200);
+    const latestByIssue = new Map<string, { issueId: Id<"issues">; createdAt: number }>();
+    for (const row of rows) {
+      if (row.authorId === userId) continue;
+      const prev = latestByIssue.get(row.issueId);
+      if (!prev || row.createdAt > prev.createdAt) {
+        latestByIssue.set(row.issueId, { issueId: row.issueId, createdAt: row.createdAt });
+      }
+    }
+    const issues: Doc<"issues">[] = [];
+    for (const entry of latestByIssue.values()) {
+      const issue = await ctx.db.get("issues", entry.issueId);
+      if (issue && issue.workspaceId === args.workspaceId) {
+        issues.push(issue);
+      }
+    }
+    const enriched = await enrichIssues(ctx, issues);
+    const mentionedAt = new Map(
+      [...latestByIssue.values()].map((entry) => [entry.issueId, entry.createdAt]),
+    );
+    return enriched.sort(
+      (a, b) => (mentionedAt.get(b._id) ?? 0) - (mentionedAt.get(a._id) ?? 0),
+    );
+  },
+});
+
 export const mine = zQuery({
   args: {
     workspaceId: workspaceIdSchema,
@@ -577,6 +612,16 @@ export const remove = zMutation({
         .withIndex("by_issue", (q) => q.eq("issueId", issue._id))
         .take(50);
       for (const comment of comments) {
+        for (let mentionPass = 0; mentionPass < 10; mentionPass += 1) {
+          const mentionRows = await ctx.db
+            .query("mentions")
+            .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
+            .take(50);
+          for (const row of mentionRows) {
+            await ctx.db.delete("mentions", row._id);
+          }
+          if (mentionRows.length < 50) break;
+        }
         await ctx.db.delete("comments", comment._id);
       }
       if (comments.length < 50) break;

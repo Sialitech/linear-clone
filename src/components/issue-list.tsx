@@ -23,11 +23,14 @@ export default function IssueList({
   issues,
   empty,
   embedded = false,
+  nested = false,
 }: {
   issues: IssueItem[] | undefined;
   empty: string;
   /** When true, omit sticky column headers and outer scroll so the list nests under a group header. */
   embedded?: boolean;
+  /** When true, omit outer scroll so a parent can scroll multiple lists. */
+  nested?: boolean;
 }) {
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
 
@@ -74,8 +77,8 @@ export default function IssueList({
     <div
       className={cn(
         "relative",
-        embedded
-          ? "pb-[env(safe-area-inset-bottom)]"
+        embedded || nested
+          ? embedded && "pb-[env(safe-area-inset-bottom)]"
           : "min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]",
       )}
     >

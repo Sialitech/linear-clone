@@ -126,9 +126,21 @@ export default defineSchema({
     issueId: v.id("issues"),
     authorId: v.id("users"),
     content: v.string(),
+    // Missing on older rows — treat as [] when reading.
+    mentionIds: v.optional(v.array(v.id("users"))),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_issue", ["issueId"]),
+  mentions: defineTable({
+    workspaceId: v.id("workspaces"),
+    issueId: v.id("issues"),
+    commentId: v.id("comments"),
+    mentionedUserId: v.id("users"),
+    authorId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_mentioned_user", ["workspaceId", "mentionedUserId"])
+    .index("by_comment", ["commentId"]),
   activities: defineTable({
     issueId: v.id("issues"),
     workspaceId: v.id("workspaces"),
