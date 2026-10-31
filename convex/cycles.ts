@@ -11,22 +11,13 @@ import {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-function startOfLocalDay(timestamp: number) {
-  const date = new Date(timestamp);
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-}
-
-function endOfLocalDay(timestamp: number) {
-  return startOfLocalDay(timestamp) + MS_PER_DAY - 1;
-}
-
+// Clients send start-of-day timestamps (same helper as due dates). Treat both
+// bounds as inclusive calendar days without reinterpreting in server TZ.
 function normalizeRange(startsAt: number, endsAt: number) {
-  const start = startOfLocalDay(startsAt);
-  const end = endOfLocalDay(endsAt);
-  if (end < start) {
+  if (endsAt < startsAt) {
     throw new Error("End date must be on or after the start date");
   }
-  return { startsAt: start, endsAt: end };
+  return { startsAt, endsAt: endsAt + MS_PER_DAY - 1 };
 }
 
 async function requireCycleAccess(ctx: ReadCtx, cycleId: Id<"cycles">) {
@@ -209,10 +200,15 @@ export const moveUnfinishedToNext = zMutation({
     if (upcoming[0]) {
       next = upcoming[0];
     } else {
-      const duration = Math.max(cycle.endsAt - cycle.startsAt, MS_PER_DAY - 1);
-      const nextStart = startOfLocalDay(cycle.endsAt) + MS_PER_DAY;
-      const nextEnd = nextStart + duration;
-      const nextId = await createUpcomingCycle(ctx, cycle.workspaceId, nextStart, nextEnd);
+      const durationMs = Math.max(cycle.endsAt - cycle.startsAt + 1, MS_PER_DAY);
+      const nextStart = cycle.endsAt + 1;
+      const nextEndDayStart = nextStart + durationMs - MS_PER_DAY;
+      const nextId = await createUpcomingCycle(
+        ctx,
+        cycle.workspaceId,
+        nextStart,
+        nextEndDayStart,
+      );
       const created = await ctx.db.get("cycles", nextId);
       if (!created) throw new Error("Failed to create next cycle");
       next = created;
