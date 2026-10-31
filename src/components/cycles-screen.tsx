@@ -31,19 +31,27 @@ export default function CyclesScreen() {
   const [rolling, setRolling] = useState(false);
   const [pending, setPending] = useState(false);
 
-  const active = cycles?.find((cycle) => cycle.status === "active");
-  const upcoming = cycles?.filter((cycle) => cycle.status === "upcoming") ?? [];
-  const completed = cycles?.filter((cycle) => cycle.status === "completed") ?? [];
+  const active = useMemo(
+    () => cycles?.find((cycle) => cycle.status === "active"),
+    [cycles],
+  );
+  const upcoming = useMemo(
+    () => cycles?.filter((cycle) => cycle.status === "upcoming") ?? [],
+    [cycles],
+  );
+  const completed = useMemo(
+    () => cycles?.filter((cycle) => cycle.status === "completed") ?? [],
+    [cycles],
+  );
   const nextNumber = useMemo(() => {
     if (!cycles?.length) return 1;
     return Math.max(...cycles.map((cycle) => cycle.number)) + 1;
   }, [cycles]);
 
-  const defaultCreateDates = useMemo(() => defaultNextRange(active ?? upcoming[0] ?? completed[0]), [
-    active,
-    upcoming,
-    completed,
-  ]);
+  const defaultCreateDates = useMemo(
+    () => defaultNextRange(active ?? upcoming[0] ?? completed[0]),
+    [active, upcoming, completed],
+  );
 
   async function onCreate(startsAt: string, endsAt: string) {
     if (!workspace) return;
