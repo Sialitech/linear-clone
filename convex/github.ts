@@ -3,12 +3,13 @@ import { v } from "convex/values";
 import { z } from "zod";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, type ActionCtx, type MutationCtx } from "./_generated/server";
 import {
   assertCanManage,
   requireIssueAccess,
   requireProjectAccess,
   requireWorkspaceMember,
+  type ReadCtx,
 } from "./lib/access";
 import {
   issueIdSchema,
@@ -19,6 +20,21 @@ import {
   zMutation,
   zQuery,
 } from "./lib/functions";
+import {
+  buildGithubManifest,
+  githubAppDisplayName,
+  githubAuthorizeUrl,
+  githubOAuthStartUrl,
+  normalizeReturnOrigin,
+  parseGithubTokenBody,
+  parseGithubUser,
+  parseManifestApp,
+  parsePullRequestUrl,
+} from "./lib/github";
+
+const OAUTH_STATE_TTL_MS = 30 * 60 * 1000;
+
+export { parsePullRequestUrl };
 
 const githubOwnerSchema = z
   .string()
@@ -56,39 +72,62 @@ function oauthConfigured() {
   return Boolean(githubClientId() && githubClientSecret());
 }
 
-function siteUrl() {
-  const value = process.env.SITE_URL?.trim();
-  if (!value) return null;
-  return value.replace(/\/$/, "");
+function newOAuthState() {
+  return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+}
+
+async function insertOAuthState(
+  ctx: MutationCtx,
+  args: {
+    workspaceId: Id<"workspaces">;
+    userId: Id<"users">;
+    returnOrigin: string;
+    kind: "manifest" | "connect";
+  },
+) {
+  const returnOrigin = normalizeReturnOrigin(args.returnOrigin);
+  if (!returnOrigin) {
+    throw new Error("Open Settings in the app and try connecting again");
+  }
+  const state = newOAuthState();
+  await ctx.db.insert("githubOAuthStates", {
+    state,
+    workspaceId: args.workspaceId,
+    userId: args.userId,
+    returnOrigin,
+    kind: args.kind,
+    createdAt: Date.now(),
+  });
+  return state;
+}
+
+async function loadOAuthCredentials(ctx: ReadCtx, workspaceId: Id<"workspaces">) {
+  const clientId = githubClientId();
+  const clientSecret = githubClientSecret();
+  if (clientId && clientSecret) {
+    return { clientId, clientSecret, mode: "oauth_app" as const };
+  }
+  const app = await ctx.db
+    .query("githubApps")
+    .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+    .unique();
+  if (!app) return null;
+  return {
+    clientId: app.clientId,
+    clientSecret: app.clientSecret,
+    mode: "github_app" as const,
+    slug: app.slug,
+  };
+}
+
+function presentText(value: string | undefined) {
+  return value && value.length > 0 ? value : null;
 }
 
 function convexSiteUrl() {
   const value = process.env.CONVEX_SITE_URL?.trim();
   if (!value) return null;
   return value.replace(/\/$/, "");
-}
-
-export function parsePullRequestUrl(url: string) {
-  try {
-    const parsed = new URL(url.trim());
-    if (parsed.hostname !== "github.com" && parsed.hostname !== "www.github.com") {
-      return null;
-    }
-    const match = parsed.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/);
-    if (!match) return null;
-    const owner = match[1];
-    const repo = match[2];
-    const number = Number(match[3]);
-    if (!owner || !repo || !Number.isFinite(number)) return null;
-    return {
-      owner,
-      repo,
-      number,
-      url: `https://github.com/${owner}/${repo}/pull/${number}`,
-    };
-  } catch {
-    return null;
-  }
 }
 
 function publicPullRequest(doc: {
@@ -128,9 +167,14 @@ export const oauthStatus = zQuery({
         q.eq("workspaceId", args.workspaceId).eq("userId", userId),
       )
       .unique();
+    const app = await ctx.db
+      .query("githubApps")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .unique();
     return {
-      configured: oauthConfigured(),
+      configured: oauthConfigured() || Boolean(app),
       connected: Boolean(connection),
+      login: presentText(connection?.login),
       providerUserId: connection?.providerUserId ?? null,
     };
   },
@@ -218,34 +262,51 @@ export const clearProjectRepo = zMutation({
   },
 });
 
+const returnOriginSchema = z.string().trim().min(1).max(200);
+
 export const beginOAuth = zMutation({
-  args: { workspaceId: workspaceIdSchema },
+  args: {
+    workspaceId: workspaceIdSchema,
+    returnOrigin: returnOriginSchema,
+  },
   handler: async (ctx, args) => {
-    const { userId, membership } = await requireWorkspaceMember(ctx, args.workspaceId);
-    assertCanManage(membership);
-    const clientId = githubClientId();
-    if (!clientId || !githubClientSecret()) {
-      throw new Error("GitHub OAuth is not configured");
-    }
+    const { userId } = await requireWorkspaceMember(ctx, args.workspaceId);
     const redirectBase = convexSiteUrl();
     if (!redirectBase) {
-      throw new Error("CONVEX_SITE_URL is not available");
+      throw new Error("GitHub connect is unavailable right now");
     }
-    const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-    await ctx.db.insert("githubOAuthStates", {
-      state,
+    const credentials = await loadOAuthCredentials(ctx, args.workspaceId);
+    if (!credentials) {
+      const workspace = await ctx.db.get(args.workspaceId);
+      const state = await insertOAuthState(ctx, {
+        workspaceId: args.workspaceId,
+        userId,
+        returnOrigin: args.returnOrigin,
+        kind: "manifest",
+      });
+      const homepage = normalizeReturnOrigin(args.returnOrigin);
+      if (!homepage) {
+        throw new Error("Open Settings in the app and try connecting again");
+      }
+      return {
+        kind: "manifest" as const,
+        action: `https://github.com/settings/apps/new?state=${encodeURIComponent(state)}`,
+        manifest: buildGithubManifest({
+          name: githubAppDisplayName(workspace?.name ?? "Issues", state),
+          homepage,
+          convexSite: redirectBase,
+        }),
+      };
+    }
+    const state = await insertOAuthState(ctx, {
       workspaceId: args.workspaceId,
       userId,
-      createdAt: Date.now(),
-    });
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: `${redirectBase}/github/oauth/callback`,
-      scope: "repo read:user",
-      state,
+      returnOrigin: args.returnOrigin,
+      kind: "connect",
     });
     return {
-      url: `https://github.com/login/oauth/authorize?${params.toString()}`,
+      kind: "authorize" as const,
+      url: githubOAuthStartUrl(redirectBase, state),
     };
   },
 });
@@ -253,8 +314,7 @@ export const beginOAuth = zMutation({
 export const disconnect = zMutation({
   args: { workspaceId: workspaceIdSchema },
   handler: async (ctx, args) => {
-    const { userId, membership } = await requireWorkspaceMember(ctx, args.workspaceId);
-    assertCanManage(membership);
+    const { userId } = await requireWorkspaceMember(ctx, args.workspaceId);
     const connection = await ctx.db
       .query("githubConnections")
       .withIndex("by_workspace_and_user", (q) =>
@@ -337,24 +397,30 @@ export const refreshPullRequest = zAction({
     if (!membership) {
       throw new Error("You do not have access to this workspace");
     }
-    const token = await ctx.runQuery(internal.github.getAccessTokenInternal, {
+    const session = await ctx.runQuery(internal.github.getGithubSessionInternal, {
       workspaceId: pullRequest.workspaceId,
       userId,
     });
-    if (!token) {
+    if (!session) {
       return { refreshed: false as const, reason: "no_token" as const };
     }
-    const response = await fetch(
-      `https://api.github.com/repos/${pullRequest.owner}/${pullRequest.repo}/pulls/${pullRequest.number}`,
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`,
-          "User-Agent": "linear-clone",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-      },
-    );
+    let token = session.accessToken;
+    const expiresSoon = session.expiresAt !== null && session.expiresAt <= Date.now() + 60_000;
+    if (expiresSoon) {
+      const refreshed = await persistRefreshedToken(ctx, session, pullRequest.workspaceId, userId);
+      if (!refreshed) {
+        return { refreshed: false as const, reason: "github_error" as const };
+      }
+      token = refreshed;
+    }
+    let response = await fetchPullRequest(pullRequest, token);
+    if (response.status === 401 && session.refreshToken && !expiresSoon) {
+      const refreshed = await persistRefreshedToken(ctx, session, pullRequest.workspaceId, userId);
+      if (!refreshed) {
+        return { refreshed: false as const, reason: "github_error" as const };
+      }
+      response = await fetchPullRequest(pullRequest, refreshed);
+    }
     if (!response.ok) {
       return { refreshed: false as const, reason: "github_error" as const };
     }
@@ -396,7 +462,7 @@ export const getMembershipInternal = internalQuery({
   },
 });
 
-export const getAccessTokenInternal = internalQuery({
+export const getGithubSessionInternal = internalQuery({
   args: {
     workspaceId: v.id("workspaces"),
     userId: v.id("users"),
@@ -408,7 +474,52 @@ export const getAccessTokenInternal = internalQuery({
         q.eq("workspaceId", args.workspaceId).eq("userId", args.userId),
       )
       .unique();
-    return connection?.accessToken ?? null;
+    if (!connection) return null;
+    const credentials = await loadOAuthCredentials(ctx, args.workspaceId);
+    return {
+      accessToken: connection.accessToken,
+      refreshToken: presentText(connection.refreshToken),
+      expiresAt: connection.expiresAt && connection.expiresAt > 0 ? connection.expiresAt : null,
+      clientId: credentials?.clientId ?? null,
+      clientSecret: credentials?.clientSecret ?? null,
+    };
+  },
+});
+
+export const credentialsInternal = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const credentials = await loadOAuthCredentials(ctx, args.workspaceId);
+    if (!credentials) return null;
+    return {
+      clientId: credentials.clientId,
+      clientSecret: credentials.clientSecret,
+      mode: credentials.mode,
+    };
+  },
+});
+
+export const connectRedirectInternal = internalQuery({
+  args: { state: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("githubOAuthStates")
+      .withIndex("by_state", (q) => q.eq("state", args.state))
+      .unique();
+    if (!row || (row.kind ?? "connect") !== "connect") return null;
+    if (Date.now() - row.createdAt > OAUTH_STATE_TTL_MS) return null;
+    const redirectBase = convexSiteUrl();
+    if (!redirectBase || !row.returnOrigin) return null;
+    const credentials = await loadOAuthCredentials(ctx, row.workspaceId);
+    if (!credentials) return null;
+    return {
+      url: githubAuthorizeUrl({
+        clientId: credentials.clientId,
+        redirectUri: `${redirectBase}/github/oauth/callback`,
+        state: row.state,
+        mode: credentials.mode,
+      }),
+    };
   },
 });
 
@@ -428,22 +539,74 @@ export const patchPullRequestInternal = internalMutation({
 });
 
 export const consumeOAuthStateInternal = internalMutation({
-  args: { state: v.string() },
+  args: {
+    state: v.string(),
+    kind: v.union(v.literal("manifest"), v.literal("connect")),
+  },
   handler: async (ctx, args) => {
     const row = await ctx.db
       .query("githubOAuthStates")
       .withIndex("by_state", (q) => q.eq("state", args.state))
       .unique();
     if (!row) return null;
+    if ((row.kind ?? "connect") !== args.kind) return null;
     const ageMs = Date.now() - row.createdAt;
     await ctx.db.delete("githubOAuthStates", row._id);
-    if (ageMs > 15 * 60 * 1000) {
-      return null;
-    }
+    if (ageMs > OAUTH_STATE_TTL_MS) return null;
     return {
       workspaceId: row.workspaceId,
       userId: row.userId,
+      returnOrigin: presentText(row.returnOrigin),
     };
+  },
+});
+
+export const createOAuthStateInternal = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    returnOrigin: v.string(),
+    kind: v.union(v.literal("manifest"), v.literal("connect")),
+  },
+  handler: async (ctx, args) => {
+    return await insertOAuthState(ctx, args);
+  },
+});
+
+export const saveGithubAppInternal = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    appId: v.number(),
+    slug: v.string(),
+    name: v.string(),
+    clientId: v.string(),
+    clientSecret: v.string(),
+    privateKey: v.string(),
+    webhookSecret: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("githubApps")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .unique();
+    const fields = {
+      appId: args.appId,
+      slug: args.slug,
+      name: args.name,
+      clientId: args.clientId,
+      clientSecret: args.clientSecret,
+      privateKey: args.privateKey,
+      ...(args.webhookSecret ? { webhookSecret: args.webhookSecret } : {}),
+      createdAt: Date.now(),
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, fields);
+      return existing._id;
+    }
+    return await ctx.db.insert("githubApps", {
+      workspaceId: args.workspaceId,
+      ...fields,
+    });
   },
 });
 
@@ -453,6 +616,9 @@ export const saveConnectionInternal = internalMutation({
     userId: v.id("users"),
     providerUserId: v.string(),
     accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    login: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -461,73 +627,181 @@ export const saveConnectionInternal = internalMutation({
         q.eq("workspaceId", args.workspaceId).eq("userId", args.userId),
       )
       .unique();
+    const fields = {
+      providerUserId: args.providerUserId,
+      accessToken: args.accessToken,
+      refreshToken: args.refreshToken ?? "",
+      expiresAt: args.expiresAt ?? 0,
+      login: args.login ?? "",
+      createdAt: Date.now(),
+    };
     if (existing) {
-      await ctx.db.patch("githubConnections", existing._id, {
-        providerUserId: args.providerUserId,
-        accessToken: args.accessToken,
-        createdAt: Date.now(),
-      });
+      await ctx.db.patch("githubConnections", existing._id, fields);
       return existing._id;
     }
     return await ctx.db.insert("githubConnections", {
       workspaceId: args.workspaceId,
       userId: args.userId,
-      providerUserId: args.providerUserId,
-      accessToken: args.accessToken,
-      createdAt: Date.now(),
+      ...fields,
     });
   },
 });
 
-export async function exchangeGithubCode(code: string) {
-  const clientId = githubClientId();
-  const clientSecret = githubClientSecret();
-  if (!clientId || !clientSecret) {
-    throw new Error("GitHub OAuth is not configured");
+export const updateTokensInternal = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("githubConnections")
+      .withIndex("by_workspace_and_user", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("userId", args.userId),
+      )
+      .unique();
+    if (!existing) return null;
+    await ctx.db.patch("githubConnections", existing._id, {
+      accessToken: args.accessToken,
+      ...(args.refreshToken !== undefined ? { refreshToken: args.refreshToken } : {}),
+      ...(args.expiresAt !== undefined ? { expiresAt: args.expiresAt } : {}),
+    });
+    return existing._id;
+  },
+});
+
+type GithubCredentials = { clientId: string; clientSecret: string };
+
+export async function exchangeGithubCode(code: string, credentials: GithubCredentials) {
+  const tokenBody = await requestGithubToken({
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret,
+    code,
+  });
+  const token = parseGithubTokenBody(tokenBody, Date.now());
+  if (!token) {
+    const error =
+      tokenBody && typeof tokenBody === "object" && typeof (tokenBody as { error?: unknown }).error === "string"
+        ? (tokenBody as { error: string }).error
+        : "github_token_failed";
+    throw new Error(`GitHub token exchange failed (${error})`);
   }
+  const userResponse = await fetch("https://api.github.com/user", {
+    headers: githubApiHeaders(token.accessToken),
+  });
+  if (!userResponse.ok) {
+    throw new Error("Failed to load GitHub user");
+  }
+  const user = parseGithubUser(await readJson(userResponse));
+  if (!user) {
+    throw new Error("GitHub user id missing");
+  }
+  return {
+    accessToken: token.accessToken,
+    refreshToken: token.refreshToken,
+    expiresAt: token.expiresAt,
+    providerUserId: user.id,
+    login: user.login,
+  };
+}
+
+export async function createGithubAppFromManifest(code: string) {
+  const response = await fetch(
+    `https://api.github.com/app-manifests/${encodeURIComponent(code)}/conversions`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "linear-clone",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    },
+  );
+  const body = await readJson(response);
+  const created = response.ok ? parseManifestApp(body) : null;
+  if (!created) {
+    throw new Error("GitHub app registration failed");
+  }
+  return created;
+}
+
+async function refreshGithubAccessToken(credentials: GithubCredentials, refreshToken: string) {
+  const body = await requestGithubToken({
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret,
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  });
+  return parseGithubTokenBody(body, Date.now());
+}
+
+async function persistRefreshedToken(
+  ctx: Pick<ActionCtx, "runMutation">,
+  session: {
+    refreshToken: string | null;
+    clientId: string | null;
+    clientSecret: string | null;
+  },
+  workspaceId: Id<"workspaces">,
+  userId: Id<"users">,
+) {
+  if (!session.refreshToken || !session.clientId || !session.clientSecret) return null;
+  const next = await refreshGithubAccessToken(
+    { clientId: session.clientId, clientSecret: session.clientSecret },
+    session.refreshToken,
+  );
+  if (!next) return null;
+  await ctx.runMutation(internal.github.updateTokensInternal, {
+    workspaceId,
+    userId,
+    accessToken: next.accessToken,
+    refreshToken: next.refreshToken ?? "",
+    expiresAt: next.expiresAt ?? 0,
+  });
+  return next.accessToken;
+}
+
+function fetchPullRequest(
+  pullRequest: { owner: string; repo: string; number: number },
+  token: string,
+) {
+  return fetch(
+    `https://api.github.com/repos/${pullRequest.owner}/${pullRequest.repo}/pulls/${pullRequest.number}`,
+    { headers: githubApiHeaders(token) },
+  );
+}
+
+function githubApiHeaders(token: string) {
+  return {
+    Accept: "application/vnd.github+json",
+    Authorization: `Bearer ${token}`,
+    "User-Agent": "linear-clone",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+}
+
+async function requestGithubToken(body: Record<string, string>) {
   const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-    }),
+    body: JSON.stringify(body),
   });
+  const payload = await readJson(tokenResponse);
   if (!tokenResponse.ok) {
     throw new Error("GitHub token exchange failed");
   }
-  const tokenBody = (await tokenResponse.json()) as {
-    access_token?: string;
-    error?: string;
-  };
-  if (!tokenBody.access_token) {
-    throw new Error(tokenBody.error ?? "GitHub token exchange failed");
-  }
-  const userResponse = await fetch("https://api.github.com/user", {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${tokenBody.access_token}`,
-      "User-Agent": "linear-clone",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
-  if (!userResponse.ok) {
-    throw new Error("Failed to load GitHub user");
-  }
-  const userBody = (await userResponse.json()) as { id?: number | string };
-  if (userBody.id === undefined) {
-    throw new Error("GitHub user id missing");
-  }
-  return {
-    accessToken: tokenBody.access_token,
-    providerUserId: String(userBody.id),
-  };
+  return payload;
 }
 
-export function oauthRedirectTarget() {
-  return siteUrl() ?? "/";
+async function readJson(response: Response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }

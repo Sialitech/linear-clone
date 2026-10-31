@@ -2,11 +2,104 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { auth } from "./auth";
-import { exchangeGithubCode, oauthRedirectTarget } from "./github";
+import { createGithubAppFromManifest, exchangeGithubCode } from "./github";
+import {
+  clearOAuthStateCookie,
+  GITHUB_OAUTH_STATE_COOKIE,
+  githubInstallUrl,
+  oauthStateCookie,
+  readCookie,
+  settingsLocation,
+} from "./lib/github";
 
 const http = httpRouter();
 
 auth.addHttpRoutes(http);
+
+function redirectToSettings(origin: string | null | undefined, status: string) {
+  const headers = new Headers({ "Set-Cookie": clearOAuthStateCookie() });
+  const location = settingsLocation(origin, status);
+  if (!location) {
+    return new Response(`GitHub connection ${status}. Open Settings and try again.`, {
+      status: 500,
+      headers,
+    });
+  }
+  headers.set("Location", location);
+  return new Response(null, { status: 302, headers });
+}
+
+http.route({
+  path: "/github/oauth/start",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const state = new URL(request.url).searchParams.get("state");
+    if (!state) {
+      return new Response("Missing GitHub connect state.", { status: 400 });
+    }
+    const target = await ctx.runQuery(internal.github.connectRedirectInternal, { state });
+    if (!target) {
+      return new Response("This GitHub connect link expired. Return to Settings and try again.", {
+        status: 400,
+      });
+    }
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: target.url,
+        "Set-Cookie": oauthStateCookie(state),
+      },
+    });
+  }),
+});
+
+http.route({
+  path: "/github/manifest/callback",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    if (!code || !state) {
+      return redirectToSettings(null, "missing");
+    }
+    const pending = await ctx.runMutation(internal.github.consumeOAuthStateInternal, {
+      state,
+      kind: "manifest",
+    });
+    if (!pending?.returnOrigin) {
+      return redirectToSettings(pending?.returnOrigin, "expired");
+    }
+    try {
+      const created = await createGithubAppFromManifest(code);
+      await ctx.runMutation(internal.github.saveGithubAppInternal, {
+        workspaceId: pending.workspaceId,
+        appId: created.appId,
+        slug: created.slug,
+        name: created.name,
+        clientId: created.clientId,
+        clientSecret: created.clientSecret,
+        privateKey: created.privateKey,
+        ...(created.webhookSecret ? { webhookSecret: created.webhookSecret } : {}),
+      });
+      const connectState = await ctx.runMutation(internal.github.createOAuthStateInternal, {
+        workspaceId: pending.workspaceId,
+        userId: pending.userId,
+        returnOrigin: pending.returnOrigin,
+        kind: "connect",
+      });
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: githubInstallUrl(created.slug, connectState),
+          "Set-Cookie": oauthStateCookie(connectState),
+        },
+      });
+    } catch {
+      return redirectToSettings(pending.returnOrigin, "error");
+    }
+  }),
+});
 
 http.route({
   path: "/github/oauth/callback",
@@ -14,50 +107,60 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state");
     const error = url.searchParams.get("error");
-    const base = oauthRedirectTarget();
-    const destination =
-      base.startsWith("http://") || base.startsWith("https://")
-        ? new URL("/settings", base)
-        : null;
+    const candidates = [url.searchParams.get("state"), readCookie(request.headers.get("cookie"), GITHUB_OAUTH_STATE_COOKIE)]
+      .filter((value): value is string => Boolean(value));
 
-    function redirectWith(status: string) {
-      if (!destination) {
-        return new Response(`GitHub OAuth ${status}. Set SITE_URL on the Convex deployment.`, {
-          status: 500,
+    async function takePending() {
+      for (const candidate of candidates) {
+        const pending = await ctx.runMutation(internal.github.consumeOAuthStateInternal, {
+          state: candidate,
+          kind: "connect",
         });
+        if (pending) return pending;
       }
-      destination.searchParams.set("github", status);
-      return Response.redirect(destination.toString(), 302);
+      return null;
     }
 
     if (error) {
-      return redirectWith("error");
+      const pending = await takePending();
+      return redirectToSettings(pending?.returnOrigin, error === "access_denied" ? "denied" : "error");
     }
-    if (!code || !state) {
-      return redirectWith("missing");
+    if (!code) {
+      return redirectToSettings(null, "missing");
     }
-
+    const pending = await takePending();
+    if (!pending) {
+      return redirectToSettings(null, "expired");
+    }
     try {
-      const pending = await ctx.runMutation(internal.github.consumeOAuthStateInternal, {
-        state,
+      const credentials = await ctx.runQuery(internal.github.credentialsInternal, {
+        workspaceId: pending.workspaceId,
       });
-      if (!pending) {
-        return redirectWith("expired");
+      if (!credentials) {
+        return redirectToSettings(pending.returnOrigin, "error");
       }
-      const exchanged = await exchangeGithubCode(code);
+      const exchanged = await exchangeGithubCode(code, credentials);
       await ctx.runMutation(internal.github.saveConnectionInternal, {
         workspaceId: pending.workspaceId,
         userId: pending.userId,
         providerUserId: exchanged.providerUserId,
         accessToken: exchanged.accessToken,
+        ...(exchanged.refreshToken ? { refreshToken: exchanged.refreshToken } : {}),
+        ...(exchanged.expiresAt ? { expiresAt: exchanged.expiresAt } : {}),
+        ...(exchanged.login ? { login: exchanged.login } : {}),
       });
-      return redirectWith("connected");
+      return redirectToSettings(pending.returnOrigin, "connected");
     } catch {
-      return redirectWith("error");
+      return redirectToSettings(pending.returnOrigin, "error");
     }
   }),
+});
+
+http.route({
+  path: "/github/webhook",
+  method: "POST",
+  handler: httpAction(async () => new Response(null, { status: 200 })),
 });
 
 export default http;

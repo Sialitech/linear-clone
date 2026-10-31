@@ -49,6 +49,7 @@ export default function SettingsScreen() {
   const [role, setRole] = useState<"admin" | "member">("member");
   const [projectId, setProjectId] = useState("");
   const [repoFullName, setRepoFullName] = useState("");
+  const [connectingGithub, setConnectingGithub] = useState(false);
 
   useEffect(() => {
     if (me?.name) setName(me.name);
@@ -66,6 +67,7 @@ export default function SettingsScreen() {
     if (github === "connected") toast.success("GitHub connected");
     else if (github === "expired") toast.error("GitHub connect link expired. Try again.");
     else if (github === "missing") toast.error("GitHub did not return an authorization code.");
+    else if (github === "denied") toast.error("GitHub connection was cancelled.");
     else toast.error("GitHub connection failed");
     params.delete("github");
     const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
@@ -158,11 +160,29 @@ export default function SettingsScreen() {
   }
 
   async function onConnectGithub() {
-    if (!workspace) return;
+    if (!workspace || connectingGithub) return;
+    setConnectingGithub(true);
     try {
-      const { url } = await beginOAuth({ workspaceId: workspace._id });
-      window.location.assign(url);
+      const result = await beginOAuth({
+        workspaceId: workspace._id,
+        returnOrigin: window.location.origin,
+      });
+      if (result.kind === "authorize") {
+        window.location.assign(result.url);
+        return;
+      }
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = result.action;
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "manifest";
+      input.value = JSON.stringify(result.manifest);
+      form.append(input);
+      document.body.append(form);
+      form.submit();
     } catch (error) {
+      setConnectingGithub(false);
       toast.error(errorMessage(error));
     }
   }
@@ -236,7 +256,7 @@ export default function SettingsScreen() {
         <section>
           <h2 className="text-sm font-medium">GitHub</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Link a repository to each project. Optional OAuth unlocks live pull request titles and status.
+            Link a repository to each project, then connect GitHub to show live pull request titles and status.
           </p>
           <div className="mt-3 space-y-3 rounded-md border border-border p-3">
             <div className="space-y-1.5">
@@ -283,36 +303,32 @@ export default function SettingsScreen() {
             )}
             <div className="border-t border-border pt-3">
               {oauthStatus === undefined ? (
-                <p className="text-xs text-muted-foreground">Checking GitHub OAuth…</p>
-              ) : !oauthStatus.configured ? (
-                <p className="text-xs text-muted-foreground">
-                  GitHub OAuth is not configured. Set <code>GITHUB_CLIENT_ID</code> and{" "}
-                  <code>GITHUB_CLIENT_SECRET</code> on the Convex deployment to enable Connect GitHub.
-                  Repository links and PR URLs still work without it.
-                </p>
-              ) : canManage ? (
+                <p className="text-xs text-muted-foreground">Checking GitHub…</p>
+              ) : oauthStatus.connected ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  {oauthStatus.connected ? (
-                    <>
-                      <p className="text-xs text-muted-foreground">
-                        Connected{oauthStatus.providerUserId ? ` as GitHub user ${oauthStatus.providerUserId}` : ""}.
-                      </p>
-                      <Button type="button" size="sm" variant="outline" onClick={() => void onDisconnectGithub()}>
-                        Disconnect
-                      </Button>
-                    </>
-                  ) : (
-                    <Button type="button" size="sm" onClick={() => void onConnectGithub()}>
-                      Connect GitHub
-                    </Button>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Connected{oauthStatus.login ? ` as ${oauthStatus.login}` : ""}.
+                  </p>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void onDisconnectGithub()}>
+                    Disconnect
+                  </Button>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  {oauthStatus.connected
-                    ? "GitHub is connected for enrichment."
-                    : "Only owners and admins can connect GitHub OAuth."}
-                </p>
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={connectingGithub}
+                    onClick={() => void onConnectGithub()}
+                  >
+                    {connectingGithub ? "Opening GitHub…" : "Connect GitHub"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {oauthStatus.configured
+                      ? "GitHub opens next so you can approve access."
+                      : "GitHub opens next. Confirm the app name, then choose the repositories it can read. No tokens to paste."}
+                  </p>
+                </div>
               )}
             </div>
           </div>

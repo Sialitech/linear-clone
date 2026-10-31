@@ -40,22 +40,22 @@ In Google Cloud, the authorized redirect URI is:
 https://<your-deployment>.convex.site/api/auth/callback/google
 ```
 
-### GitHub (optional)
+### GitHub
 
 Issue detail always shows a copyable branch name and lets members paste a PR URL. Workspace settings can link `owner/name` to a project without any GitHub token.
 
-Optional OAuth (Convex environment only — never `NEXT_PUBLIC_`):
+**Connect GitHub** in Settings does not need tokens pasted into the app. The first time, GitHub asks you to confirm an app name and choose repositories. After that, connecting is an approval on GitHub. Access tokens stay in Convex and are not returned to the client.
+
+Optional shared OAuth app (Convex environment only — never `NEXT_PUBLIC_`). When both are set, Connect skips creating an app and uses this client instead:
 
 - `GITHUB_CLIENT_ID`
 - `GITHUB_CLIENT_SECRET`
 
-When both are set, Settings shows **Connect GitHub**. The callback is:
+Callback, if you register that app yourself:
 
 ```text
 https://<your-deployment>.convex.site/github/oauth/callback
 ```
-
-Register that URL as the OAuth App callback on GitHub. Access tokens are stored in Convex and are not returned to the client. Without these env vars, repository links and PR URL linking still work; live PR title/state enrichment is skipped.
 
 ## Deploy on Vercel
 

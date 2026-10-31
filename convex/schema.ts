@@ -129,16 +129,33 @@ export default defineSchema({
     workspaceId: v.id("workspaces"),
     userId: v.id("users"),
     providerUserId: v.string(),
-    // Access token is server-side only; never return it from client queries.
+    login: v.optional(v.string()),
+    // Tokens are server-side only; never return them from client queries.
     accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    // 0 means the access token does not expire.
+    expiresAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_and_user", ["workspaceId", "userId"]),
+  githubApps: defineTable({
+    workspaceId: v.id("workspaces"),
+    appId: v.number(),
+    slug: v.string(),
+    name: v.string(),
+    clientId: v.string(),
+    clientSecret: v.string(),
+    privateKey: v.string(),
+    webhookSecret: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_workspace", ["workspaceId"]),
   githubOAuthStates: defineTable({
     state: v.string(),
     workspaceId: v.id("workspaces"),
     userId: v.id("users"),
+    returnOrigin: v.optional(v.string()),
+    kind: v.optional(v.union(v.literal("manifest"), v.literal("connect"))),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
   projectRepos: defineTable({
