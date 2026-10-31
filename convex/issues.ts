@@ -222,6 +222,34 @@ export const inbox = zQuery({
   },
 });
 
+export const mentions = zQuery({
+  args: { workspaceId: workspaceIdSchema },
+  handler: async (ctx, args) => {
+    const { userId } = await requireWorkspaceMember(ctx, args.workspaceId);
+    const rows = await ctx.db
+      .query("mentions")
+      .withIndex("by_workspace_and_mentioned_user", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("mentionedUserId", userId),
+      )
+      .take(200);
+    const latestByIssue = new Map<Id<"issues">, number>();
+    for (const row of rows) {
+      if (row.authorId === userId) continue;
+      const previous = latestByIssue.get(row.issueId) ?? 0;
+      if (row.createdAt > previous) latestByIssue.set(row.issueId, row.createdAt);
+    }
+    const issues: Doc<"issues">[] = [];
+    for (const issueId of latestByIssue.keys()) {
+      const issue = await ctx.db.get("issues", issueId);
+      if (issue) issues.push(issue);
+    }
+    const enriched = await enrichIssues(ctx, issues);
+    return enriched.sort(
+      (a, b) => (latestByIssue.get(b._id) ?? 0) - (latestByIssue.get(a._id) ?? 0),
+    );
+  },
+});
+
 export const get = zQuery({
   args: { issueId: issueIdSchema },
   handler: async (ctx, args) => {
@@ -363,6 +391,16 @@ export const remove = zMutation({
         .withIndex("by_issue", (q) => q.eq("issueId", issue._id))
         .take(50);
       for (const comment of comments) {
+        for (let mentionPass = 0; mentionPass < 10; mentionPass += 1) {
+          const mentionRows = await ctx.db
+            .query("mentions")
+            .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
+            .take(50);
+          for (const mention of mentionRows) {
+            await ctx.db.delete("mentions", mention._id);
+          }
+          if (mentionRows.length < 50) break;
+        }
         await ctx.db.delete("comments", comment._id);
       }
       if (comments.length < 50) break;

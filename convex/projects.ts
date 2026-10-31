@@ -89,6 +89,13 @@ export const remove = zMutation({
         .withIndex("by_issue", (q) => q.eq("issueId", issue._id))
         .take(200);
       for (const comment of comments) {
+        const mentionRows = await ctx.db
+          .query("mentions")
+          .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
+          .take(50);
+        for (const mention of mentionRows) {
+          await ctx.db.delete("mentions", mention._id);
+        }
         await ctx.db.delete("comments", comment._id);
       }
       await ctx.db.delete("issues", issue._id);

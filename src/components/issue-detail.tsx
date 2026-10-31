@@ -3,6 +3,8 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
+import CommentBody from "@/components/comment-body";
+import CommentComposer from "@/components/comment-composer";
 import IssueContextMenu from "@/components/issue-context-menu";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
@@ -16,18 +18,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Textarea } from "@/components/ui/textarea";
 import { dateInputToTimestamp, dateInputValue, errorMessage, formatDue, isOverdue } from "@/lib/format";
+import { pendingFromIds } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
-import { z } from "zod";
-
-const commentSchema = z.string().trim().min(1, "Write a comment").max(10000);
 
 export default function IssueDetail({ issueId }: { issueId: string }) {
   const id = issueId as Id<"issues">;
@@ -44,28 +43,16 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   const createComment = useMutation(api.comments.create);
   const updateComment = useMutation(api.comments.update);
   const removeComment = useMutation(api.comments.remove);
-  const [comment, setComment] = useState("");
   const [editingComment, setEditingComment] = useState<Id<"comments"> | null>(null);
-  const [editingText, setEditingText] = useState("");
+  const membersById = useMemo(() => {
+    const map = new Map<Id<"users">, NonNullable<typeof members>[number]>();
+    for (const member of members ?? []) map.set(member._id, member);
+    return map;
+  }, [members]);
 
   async function patch(args: Parameters<typeof update>[0]) {
     try {
       await update(args);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    }
-  }
-
-  async function onComment(event: React.FormEvent) {
-    event.preventDefault();
-    const parsed = commentSchema.safeParse(comment);
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Write a comment");
-      return;
-    }
-    try {
-      await createComment({ issueId: id, content: parsed.data });
-      setComment("");
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -124,7 +111,11 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
               </span>
             </div>
             <div className="space-y-4">
-              {comments?.map((item) => (
+              {comments?.map((item) => {
+                const mentioned = (item.mentionIds ?? [])
+                  .map((mentionId) => membersById.get(mentionId))
+                  .filter((member): member is NonNullable<typeof member> => Boolean(member));
+                return (
                 <article key={item._id} className="flex gap-2">
                   <UserAvatar user={item.author} />
                   <div className="min-w-0 flex-1">
@@ -135,10 +126,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                         <button
                           type="button"
                           className="hover:text-foreground"
-                          onClick={() => {
-                            setEditingComment(item._id);
-                            setEditingText(item.content);
-                          }}
+                          onClick={() => setEditingComment(item._id)}
                         >
                           Edit
                         </button>
@@ -152,35 +140,42 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                       </button>
                     </div>
                     {editingComment === item._id ? (
-                      <form
-                        className="mt-2 space-y-2"
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          const parsed = commentSchema.safeParse(editingText);
-                          if (!parsed.success) return;
-                          void updateComment({ commentId: item._id, content: parsed.data })
-                            .then(() => setEditingComment(null))
-                            .catch((error: unknown) => toast.error(errorMessage(error)));
+                      <CommentComposer
+                        key={item._id}
+                        members={members}
+                        initialValue={item.content}
+                        initialMentions={pendingFromIds(item.mentionIds, members)}
+                        submitLabel="Save"
+                        onCancel={() => setEditingComment(null)}
+                        onSubmit={async ({ content, mentionIds }) => {
+                          try {
+                            await updateComment({ commentId: item._id, content, mentionIds });
+                            setEditingComment(null);
+                          } catch (error) {
+                            toast.error(errorMessage(error));
+                          }
                         }}
-                      >
-                        <Textarea value={editingText} onChange={(event) => setEditingText(event.target.value)} />
-                        <Button type="submit" size="sm">Save</Button>
-                      </form>
+                      />
                     ) : (
-                      <p className="mt-1 text-sm whitespace-pre-wrap">{item.content}</p>
+                      <CommentBody content={item.content} mentions={mentioned} />
                     )}
                   </div>
                 </article>
-              ))}
+              );
+              })}
             </div>
-            <form onSubmit={onComment} className="mt-4 space-y-2">
-              <Textarea
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                placeholder="Leave a comment"
-              />
-              <Button type="submit" size="sm">Comment</Button>
-            </form>
+            <CommentComposer
+              members={members}
+              submitLabel="Comment"
+              onSubmit={async ({ content, mentionIds }) => {
+                try {
+                  await createComment({ issueId: id, content, mentionIds });
+                } catch (error) {
+                  toast.error(errorMessage(error));
+                  throw error;
+                }
+              }}
+            />
           </section>
         </div>
         <aside className="order-first border-b border-border px-3 py-3 lg:order-last lg:min-h-0 lg:overflow-auto lg:border-b-0 lg:border-l lg:px-4 lg:py-4">
