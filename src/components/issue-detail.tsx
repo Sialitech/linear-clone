@@ -3,6 +3,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
+import IssueActivity from "@/components/issue-activity";
 import IssueContextMenu from "@/components/issue-context-menu";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
@@ -119,6 +120,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
               <p className="text-muted-foreground">No description yet.</p>
             )}
           </div>
+          <IssueActivity issueId={id} />
           <section className="mt-10">
             <div className="mb-3 flex items-center gap-2">
               <h2 className="text-sm font-medium">Comments</h2>

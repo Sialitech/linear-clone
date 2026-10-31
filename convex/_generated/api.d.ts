@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as activities from "../activities.js";
 import type * as auth from "../auth.js";
 import type * as comments from "../comments.js";
 import type * as cycles from "../cycles.js";
@@ -15,6 +16,7 @@ import type * as http from "../http.js";
 import type * as issues from "../issues.js";
 import type * as labels from "../labels.js";
 import type * as lib_access from "../lib/access.js";
+import type * as lib_activity from "../lib/activity.js";
 import type * as lib_functions from "../lib/functions.js";
 import type * as lib_keys from "../lib/keys.js";
 import type * as model from "../model.js";
@@ -29,6 +31,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activities: typeof activities;
   auth: typeof auth;
   comments: typeof comments;
   cycles: typeof cycles;
@@ -36,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   issues: typeof issues;
   labels: typeof labels;
   "lib/access": typeof lib_access;
+  "lib/activity": typeof lib_activity;
   "lib/functions": typeof lib_functions;
   "lib/keys": typeof lib_keys;
   model: typeof model;

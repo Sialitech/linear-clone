@@ -10,6 +10,14 @@ import {
 } from "./lib/access";
 import { assertAssignableCycle } from "./cycles";
 import {
+  assigneeLabel,
+  dueDateLabel,
+  priorityLabel,
+  recordActivity,
+  sameIdSet,
+  statusLabel,
+} from "./lib/activity";
+import {
   cycleIdSchema,
   issueIdSchema,
   issueStatusSchema,
@@ -345,6 +353,12 @@ export const create = zMutation({
       issueCounter: number,
       updatedAt: now,
     });
+    await recordActivity(ctx, {
+      issueId,
+      workspaceId: project.workspaceId,
+      actorId: userId,
+      type: "created",
+    });
     return issueId;
   },
 });
@@ -364,7 +378,7 @@ export const update = zMutation({
     order: z.number().finite().optional(),
   },
   handler: async (ctx, args) => {
-    const { issue } = await requireIssueAccess(ctx, args.issueId);
+    const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
     let projectId = issue.projectId;
     let workspaceId = issue.workspaceId;
     if (args.projectId && args.projectId !== issue.projectId) {
@@ -388,6 +402,128 @@ export const update = zMutation({
     }
     const title = args.title ?? issue.title;
     const description = args.description ?? issue.description;
+
+    if (args.title !== undefined && args.title !== issue.title) {
+      await recordActivity(ctx, {
+        issueId: issue._id,
+        workspaceId: issue.workspaceId,
+        actorId: userId,
+        type: "title_changed",
+        fromLabel: issue.title,
+        toLabel: args.title,
+      });
+    }
+    if (args.description !== undefined && args.description !== issue.description) {
+      await recordActivity(ctx, {
+        issueId: issue._id,
+        workspaceId: issue.workspaceId,
+        actorId: userId,
+        type: "description_changed",
+      });
+    }
+    if (args.status !== undefined && args.status !== issue.status) {
+      await recordActivity(ctx, {
+        issueId: issue._id,
+        workspaceId: issue.workspaceId,
+        actorId: userId,
+        type: "status_changed",
+        fromLabel: statusLabel(issue.status),
+        toLabel: statusLabel(args.status),
+      });
+    }
+    if (args.priority !== undefined && args.priority !== issue.priority) {
+      await recordActivity(ctx, {
+        issueId: issue._id,
+        workspaceId: issue.workspaceId,
+        actorId: userId,
+        type: "priority_changed",
+        fromLabel: priorityLabel(issue.priority),
+        toLabel: priorityLabel(args.priority),
+      });
+    }
+    if (args.assigneeId !== undefined) {
+      const nextAssigneeId = args.assigneeId ?? undefined;
+      if (nextAssigneeId !== issue.assigneeId) {
+        await recordActivity(ctx, {
+          issueId: issue._id,
+          workspaceId: issue.workspaceId,
+          actorId: userId,
+          type: "assignee_changed",
+          fromLabel: await assigneeLabel(ctx, issue.assigneeId),
+          toLabel: await assigneeLabel(ctx, nextAssigneeId),
+        });
+      }
+    }
+    if (args.dueDate !== undefined) {
+      const nextDue = args.dueDate ?? undefined;
+      if (nextDue !== issue.dueDate) {
+        if (issue.dueDate === undefined && nextDue !== undefined) {
+          await recordActivity(ctx, {
+            issueId: issue._id,
+            workspaceId: issue.workspaceId,
+            actorId: userId,
+            type: "due_date_set",
+            toLabel: dueDateLabel(nextDue),
+          });
+        } else if (nextDue === undefined) {
+          await recordActivity(ctx, {
+            issueId: issue._id,
+            workspaceId: issue.workspaceId,
+            actorId: userId,
+            type: "due_date_cleared",
+            fromLabel: dueDateLabel(issue.dueDate),
+          });
+        } else {
+          await recordActivity(ctx, {
+            issueId: issue._id,
+            workspaceId: issue.workspaceId,
+            actorId: userId,
+            type: "due_date_changed",
+            fromLabel: dueDateLabel(issue.dueDate),
+            toLabel: dueDateLabel(nextDue),
+          });
+        }
+      }
+    }
+    if (args.labelIds !== undefined && !sameIdSet(args.labelIds, issue.labelIds)) {
+      const prev = new Set(issue.labelIds);
+      const next = new Set(args.labelIds);
+      const addedIds = args.labelIds.filter((id) => !prev.has(id));
+      const removedIds = issue.labelIds.filter((id) => !next.has(id));
+      if (addedIds.length > 0) {
+        const names = [];
+        for (const labelId of addedIds) {
+          const label = await ctx.db.get("labels", labelId);
+          if (label) names.push(label.name);
+        }
+        if (names.length > 0) {
+          await recordActivity(ctx, {
+            issueId: issue._id,
+            workspaceId: issue.workspaceId,
+            actorId: userId,
+            type: "labels_added",
+            toLabel: names.join(", "),
+          });
+        }
+      }
+      if (removedIds.length > 0) {
+        const names = [];
+        for (const labelId of removedIds) {
+          const label = await ctx.db.get("labels", labelId);
+          if (label) names.push(label.name);
+        }
+        if (names.length > 0) {
+          await recordActivity(ctx, {
+            issueId: issue._id,
+            workspaceId: issue.workspaceId,
+            actorId: userId,
+            type: "labels_removed",
+            fromLabel: names.join(", "),
+          });
+        }
+      }
+    }
+
     await ctx.db.patch("issues", issue._id, {
       title,
       description,
