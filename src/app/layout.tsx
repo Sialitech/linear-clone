@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import ConvexClientProvider from "@/components/convex-client-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -14,6 +14,13 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Linear",
   description: "Issue tracking for product teams",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0d0e11",
 };
 
 export default function RootLayout({

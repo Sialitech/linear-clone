@@ -49,15 +49,15 @@ export default function ViewsScreen() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-12 items-center border-b border-border px-4">
+      <header className="flex min-h-12 items-center border-b border-border px-3 sm:px-4">
         <h1 className="text-sm font-medium">Saved views</h1>
       </header>
-      <form onSubmit={onCreate} className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-        <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="View name" className="h-7 w-48" />
+      <form onSubmit={onCreate} className="flex flex-col gap-2 border-b border-border px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
+        <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="View name" className="h-9 w-full sm:h-7 sm:w-48" />
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value as IssueStatus | "")}
-          className="h-7 rounded-md border border-border bg-transparent px-2 text-xs"
+          className="h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-7 sm:w-auto sm:text-xs"
         >
           <option value="">Any status</option>
           {ISSUE_STATUSES.map((item) => (
@@ -67,23 +67,23 @@ export default function ViewsScreen() {
         <select
           value={assigneeMode}
           onChange={(event) => setAssigneeMode(event.target.value as AssigneeMode)}
-          className="h-7 rounded-md border border-border bg-transparent px-2 text-xs"
+          className="h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-7 sm:w-auto sm:text-xs"
         >
           <option value="anyone">Anyone</option>
           <option value="me">Assigned to me</option>
           <option value="unassigned">Unassigned</option>
         </select>
-        <Button type="submit" size="sm">Save view</Button>
+        <Button type="submit" size="sm" className="h-9 sm:h-7">Save view</Button>
       </form>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]">
         {views?.map((view) => (
-          <div key={view._id} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm">
+          <div key={view._id} className="flex items-center gap-3 border-b border-border px-3 py-3 text-sm sm:px-4 sm:py-2">
             <Link href={`/views/${view._id}`} className="min-w-0 flex-1 truncate hover:underline">
               {view.name}
             </Link>
             <button
               type="button"
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="inline-flex min-h-11 items-center px-2 text-xs text-muted-foreground hover:text-foreground sm:min-h-0"
               onClick={() => void remove({ viewId: view._id }).catch((error: unknown) => toast.error(errorMessage(error)))}
             >
               Delete
@@ -122,8 +122,8 @@ export function SavedViewScreen({ viewId }: { viewId: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-12 items-center border-b border-border px-4">
-        <h1 className="text-sm font-medium">{view?.name ?? "View"}</h1>
+      <header className="flex min-h-12 items-center border-b border-border px-3 sm:px-4">
+        <h1 className="truncate text-sm font-medium">{view?.name ?? "View"}</h1>
       </header>
       <IssueList issues={issues} empty="No issues in this view." />
     </div>

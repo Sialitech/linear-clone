@@ -219,10 +219,10 @@ export default function IssueComposer() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) closeComposer(); }}>
-      <DialogContent className="sm:max-w-2xl" showCloseButton>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl" showCloseButton>
         <DialogHeader>
           <DialogTitle>{composer?.mode === "edit" ? "Edit issue" : "New issue"}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="hidden sm:block">
             {me?.name ? `Creating as ${me.name}. ` : ""}
             Shortcuts: S status, P priority, A assignee, ⌘Enter save.
           </DialogDescription>
@@ -249,7 +249,7 @@ export default function IssueComposer() {
             placeholder="Add a description…"
             className="min-h-28 resize-none border-none bg-transparent px-0 shadow-none focus-visible:ring-0"
           />
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 [&_button]:h-9 sm:[&_button]:h-7">
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button type="button" variant="outline" size="sm" />}>
                 <StatusIcon status={draft.status} />
@@ -360,7 +360,7 @@ export default function IssueComposer() {
               type="date"
               value={draft.dueDate}
               onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))}
-              className="h-7 w-36 text-xs"
+              className="h-9 w-full text-base sm:h-7 sm:w-36 sm:text-xs"
             />
             <select
               value={draft.projectId}
@@ -370,7 +370,7 @@ export default function IssueComposer() {
                   projectId: event.target.value as Id<"projects">,
                 }))
               }
-              className="h-7 rounded-md border border-border bg-transparent px-2 text-xs"
+              className="h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-7 sm:w-auto sm:text-xs"
             >
               {projects?.map((project) => (
                 <option key={project._id} value={project._id}>
@@ -379,9 +379,9 @@ export default function IssueComposer() {
               ))}
             </select>
           </div>
-          <div className="flex items-center justify-between border-t border-border pt-3">
-            <span className="text-[11px] text-muted-foreground">S · P · A · ⌘Enter</span>
-            <Button type="submit" disabled={pending}>
+          <div className="flex flex-col-reverse gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="hidden text-[11px] text-muted-foreground sm:inline">S · P · A · ⌘Enter</span>
+            <Button type="submit" className="h-10 w-full sm:h-8 sm:w-auto" disabled={pending}>
               {composer?.mode === "edit" ? "Save" : "Create issue"}
             </Button>
           </div>

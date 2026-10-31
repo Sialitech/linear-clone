@@ -132,5 +132,21 @@
   }
   html {
     @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+  }
+}
+
+select,
+input[type="date"] {
+  color-scheme: dark;
+}
+
+@media (max-width: 639px) {
+  select,
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"] {
+    font-size: 16px;
+    min-height: 2.25rem;
   }
 }

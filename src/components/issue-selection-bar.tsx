@@ -75,7 +75,7 @@ export default function IssueSelectionBar({
   }
 
   return (
-    <div className="sticky bottom-4 z-20 mx-auto mt-3 flex w-fit items-center gap-1 rounded-full border border-border bg-popover px-2 py-1 text-sm shadow-lg">
+    <div className="sticky bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 mx-3 mt-3 flex max-w-full flex-wrap items-center justify-center gap-1 rounded-2xl border border-border bg-popover px-2 py-1 text-sm shadow-lg sm:mx-auto sm:w-fit sm:rounded-full">
       <span className="px-2 font-medium">{count} selected</span>
       <DropdownMenu>
         <DropdownMenuTrigger

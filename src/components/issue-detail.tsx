@@ -91,22 +91,22 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   return (
     <IssueContextMenu issue={issue}>
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-12 items-center gap-3 border-b border-border px-4">
-        <Link href={`/projects/${issue.projectId}`} className="font-mono text-xs text-muted-foreground hover:text-foreground">
+      <header className="flex min-h-12 items-center gap-2 border-b border-border px-3 py-2 sm:gap-3 sm:px-4">
+        <Link href={`/projects/${issue.projectId}`} className="shrink-0 font-mono text-xs text-muted-foreground hover:text-foreground">
           {issue.identifier}
         </Link>
-        <span className="text-xs text-muted-foreground">{issue.projectName}</span>
-        <div className="ml-auto flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => openEdit(issue._id)}>
+        <span className="min-w-0 truncate text-xs text-muted-foreground">{issue.projectName}</span>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Button type="button" variant="outline" size="sm" className="h-9 sm:h-7" onClick={() => openEdit(issue._id)}>
             Edit
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => void onDelete()}>
+          <Button type="button" variant="ghost" size="sm" className="h-9 sm:h-7" onClick={() => void onDelete()}>
             Delete
           </Button>
         </div>
       </header>
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="min-h-0 overflow-auto px-6 py-5">
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto pb-[env(safe-area-inset-bottom)] lg:grid-cols-[minmax(0,1fr)_280px] lg:overflow-hidden lg:pb-0">
+        <div className="px-4 py-4 sm:px-6 sm:py-5 lg:min-h-0 lg:overflow-auto">
           <h1 className="text-xl font-medium tracking-tight">{issue.title}</h1>
           <div className="prose-invert mt-4 text-sm leading-6 text-foreground/90 [&_code]:rounded [&_code]:bg-white/8 [&_code]:px-1 [&_h1]:mb-2 [&_h1]:text-lg [&_h2]:mb-2 [&_h2]:text-base [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
             {issue.description ? (
@@ -183,7 +183,8 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
             </form>
           </section>
         </div>
-        <aside className="space-y-4 border-t border-border px-4 py-4 lg:border-t-0 lg:border-l">
+        <aside className="order-first border-b border-border px-3 py-3 lg:order-last lg:min-h-0 lg:overflow-auto lg:border-b-0 lg:border-l lg:px-4 lg:py-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:gap-4 [&_button]:h-9 [&_button]:max-w-full [&_button]:shrink sm:[&_button]:h-7">
           <Field label="Status">
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="sm" />}>
@@ -257,11 +258,12 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                 void patch({ issueId: id, dueDate: dateInputToTimestamp(event.target.value) })
               }
               className={cn(
-                "h-7 rounded-md border border-border bg-transparent px-2 text-xs",
+                "h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-7 sm:text-xs",
                 issue.dueDate && isOverdue(issue.dueDate, issue.status) && "text-destructive",
               )}
             />
           </Field>
+          </div>
         </aside>
       </div>
     </div>
@@ -271,7 +273,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         {label}
       </div>

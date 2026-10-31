@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCorners,
   useDroppable,
   useSensor,
@@ -123,7 +124,10 @@ export default function KanbanBoard({
       ),
     );
   });
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
 
   useEffect(() => {
     if (dragging.current || !issues) return;
@@ -200,7 +204,7 @@ export default function KanbanBoard({
         updateColumns(groupIssues(issues));
       }}
     >
-      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
+      <div className="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
         {ISSUE_STATUSES.map((status) => (
           <Column
             key={status}
@@ -230,7 +234,7 @@ function Column({
   return (
     <section
       className={cn(
-        "flex w-[272px] shrink-0 flex-col rounded-lg bg-white/[0.02]",
+        "flex h-full w-[min(78vw,272px)] shrink-0 snap-start flex-col rounded-lg bg-white/[0.02] md:w-[272px]",
         isOver && "bg-white/[0.04]",
       )}
     >
@@ -240,7 +244,7 @@ function Column({
         <span className="text-xs text-muted-foreground">{issues.length}</span>
       </header>
       <SortableContext items={issues.map((issue) => issue._id)} strategy={verticalListSortingStrategy}>
-        <div ref={setNodeRef} className="flex min-h-24 flex-1 flex-col gap-1.5 px-1.5 pb-2">
+        <div ref={setNodeRef} className="flex min-h-24 flex-1 flex-col gap-1.5 overflow-y-auto px-1.5 pb-2">
           {issues.map((issue) => (
             <SortableCard key={issue._id} issue={issue} onOpen={onOpen} />
           ))}

@@ -14,10 +14,10 @@ import { Check } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 
-const rowGrid =
-  "grid grid-cols-[28px_88px_minmax(0,1fr)_36px_132px_110px_160px_72px] items-center gap-2";
-
 const emptySelection: SelectionState = { selected: [], anchorId: null };
+
+const tableRow =
+  "hidden items-center gap-2 px-4 py-2 text-[13px] md:grid md:grid-cols-[1.75rem_4.75rem_minmax(0,1fr)_2.25rem_7.5rem_6.5rem_4.25rem] lg:grid-cols-[1.75rem_5.5rem_minmax(0,1fr)_2.25rem_8.25rem_6.75rem_9rem_4.25rem]";
 
 export default function IssueList({
   issues,
@@ -68,11 +68,20 @@ export default function IssueList({
   }
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-auto">
+    <div className="relative min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase md:hidden">
+        <IssueCheckbox
+          checked={allSelected}
+          indeterminate={selectedCount > 0 && !allSelected}
+          label={allSelected ? "Clear selection" : "Select all issues"}
+          onClick={() => setSelection(selectionAfterSelectAll(orderedIds, allSelected))}
+        />
+        <span>Select</span>
+      </div>
       <div
         className={cn(
-          rowGrid,
-          "sticky top-0 z-10 border-b border-border bg-background px-4 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase",
+          tableRow,
+          "sticky top-0 z-10 border-b border-border bg-background text-[11px] font-medium tracking-wide text-muted-foreground uppercase",
         )}
       >
         <span className="flex justify-center">
@@ -94,65 +103,104 @@ export default function IssueList({
       {rows.map((issue) => {
         const isSelected = selected.has(issue._id);
         return (
-          <IssueContextMenu key={issue._id} issue={issue}>
-            <Link
-              href={`/issues/${issue._id}`}
-              onClick={(event) => {
-                if (event.shiftKey || event.metaKey || event.ctrlKey) {
-                  event.preventDefault();
-                  selectAt(issue._id, {
-                    shiftKey: event.shiftKey,
-                    toggleKey: event.metaKey || event.ctrlKey,
-                  });
-                }
-              }}
+          <IssueContextMenu key={issue._id} issue={issue} enableTouchMenu>
+            <div
               className={cn(
-                rowGrid,
-                "border-b border-border/70 px-4 py-2 text-[13px] select-none hover:bg-white/[0.03]",
-                isSelected && "bg-primary/10 hover:bg-primary/15",
+                "border-b border-border/70",
+                isSelected && "bg-primary/10",
               )}
             >
-              <span className="flex justify-center">
+              <div className="flex items-start gap-2 px-3 py-3 sm:px-4 md:hidden">
                 <IssueCheckbox
                   checked={isSelected}
                   label={isSelected ? `Deselect ${issue.identifier}` : `Select ${issue.identifier}`}
                   onClick={(event) => {
                     event.preventDefault();
-                    event.stopPropagation();
                     selectAt(issue._id, {
                       shiftKey: event.shiftKey,
                       toggleKey: event.metaKey || event.ctrlKey,
                     });
                   }}
                 />
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
-              <span className="truncate text-foreground">{issue.title}</span>
-              <span className="flex justify-center">
-                <UserAvatar user={issue.assignee} />
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                <StatusIcon status={issue.status} />
-                <span className="truncate">{statusLabel(issue.status)}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                <PriorityIcon priority={issue.priority} />
-                <span className="truncate">{priorityLabel(issue.priority)}</span>
-              </span>
-              <span className="hidden items-center gap-1 lg:flex">
-                {issue.labels.slice(0, 2).map((label) => (
-                  <LabelChip key={label._id} name={label.name} color={label.color} />
-                ))}
-              </span>
-              <span
-                className={cn(
-                  "text-xs text-muted-foreground",
-                  issue.dueDate && isOverdue(issue.dueDate, issue.status) && "text-destructive",
-                )}
+                <Link href={`/issues/${issue._id}`} className="min-w-0 flex-1">
+                  <div className="flex items-start gap-2">
+                    <StatusIcon status={issue.status} className="mt-0.5 size-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 text-[15px] leading-5 text-foreground">{issue.title}</span>
+                    <UserAvatar user={issue.assignee} />
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-5 text-xs text-muted-foreground">
+                    <span className="font-mono">{issue.identifier}</span>
+                    <span className="inline-flex items-center gap-1">
+                      <PriorityIcon priority={issue.priority} />
+                      {priorityLabel(issue.priority)}
+                    </span>
+                    <span>{statusLabel(issue.status)}</span>
+                    {issue.dueDate ? (
+                      <span className={cn(isOverdue(issue.dueDate, issue.status) && "text-destructive")}>
+                        {formatDue(issue.dueDate)}
+                      </span>
+                    ) : null}
+                    {issue.labels.slice(0, 2).map((label) => (
+                      <LabelChip key={label._id} name={label.name} color={label.color} />
+                    ))}
+                  </div>
+                </Link>
+              </div>
+              <Link
+                href={`/issues/${issue._id}`}
+                onClick={(event) => {
+                  if (event.shiftKey || event.metaKey || event.ctrlKey) {
+                    event.preventDefault();
+                    selectAt(issue._id, {
+                      shiftKey: event.shiftKey,
+                      toggleKey: event.metaKey || event.ctrlKey,
+                    });
+                  }
+                }}
+                className={cn(tableRow, "select-none hover:bg-white/[0.03]", isSelected && "hover:bg-primary/15")}
               >
-                {issue.dueDate ? formatDue(issue.dueDate) : ""}
-              </span>
-            </Link>
+                <span className="flex justify-center">
+                  <IssueCheckbox
+                    checked={isSelected}
+                    label={isSelected ? `Deselect ${issue.identifier}` : `Select ${issue.identifier}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      selectAt(issue._id, {
+                        shiftKey: event.shiftKey,
+                        toggleKey: event.metaKey || event.ctrlKey,
+                      });
+                    }}
+                  />
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
+                <span className="truncate text-foreground">{issue.title}</span>
+                <span className="flex justify-center">
+                  <UserAvatar user={issue.assignee} />
+                </span>
+                <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                  <StatusIcon status={issue.status} />
+                  <span className="truncate">{statusLabel(issue.status)}</span>
+                </span>
+                <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                  <PriorityIcon priority={issue.priority} />
+                  <span className="truncate">{priorityLabel(issue.priority)}</span>
+                </span>
+                <span className="hidden min-w-0 items-center gap-1 lg:flex">
+                  {issue.labels.slice(0, 2).map((label) => (
+                    <LabelChip key={label._id} name={label.name} color={label.color} />
+                  ))}
+                </span>
+                <span
+                  className={cn(
+                    "text-xs text-muted-foreground",
+                    issue.dueDate && isOverdue(issue.dueDate, issue.status) && "text-destructive",
+                  )}
+                >
+                  {issue.dueDate ? formatDue(issue.dueDate) : ""}
+                </span>
+              </Link>
+            </div>
           </IssueContextMenu>
         );
       })}
@@ -185,7 +233,7 @@ function IssueCheckbox({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "flex size-4 items-center justify-center rounded-[4px] border transition-colors",
+        "flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
         checked || indeterminate
           ? "border-primary bg-primary text-primary-foreground"
           : "border-muted-foreground/50 bg-transparent text-transparent hover:border-foreground",
