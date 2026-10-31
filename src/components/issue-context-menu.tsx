@@ -136,20 +136,18 @@ export default function IssueContextMenu({
                 Status
                 <span className="ml-auto text-xs text-muted-foreground">{statusLabel(issue.status)}</span>
               </MenuButton>
-              {menu.submenu === "status" ? (
-                <div className="mb-1 ml-2 rounded-md bg-white/[0.03] p-1">
-                  {ISSUE_STATUSES.map((status) => (
-                    <MenuButton
-                      key={status}
-                      active={status === issue.status}
-                      onClick={() => void patch({ issueId: issue._id, status })}
-                    >
-                      <StatusIcon status={status} />
-                      {statusLabel(status)}
-                    </MenuButton>
-                  ))}
-                </div>
-              ) : null}
+              <Submenu open={menu.submenu === "status"}>
+                {ISSUE_STATUSES.map((status) => (
+                  <MenuButton
+                    key={status}
+                    active={status === issue.status}
+                    onClick={() => void patch({ issueId: issue._id, status })}
+                  >
+                    <StatusIcon status={status} />
+                    {statusLabel(status)}
+                  </MenuButton>
+                ))}
+              </Submenu>
               <MenuButton
                 onMouseEnter={() => setMenu((current) => (current ? { ...current, submenu: "priority" } : current))}
               >
@@ -157,20 +155,18 @@ export default function IssueContextMenu({
                 Priority
                 <span className="ml-auto text-xs text-muted-foreground">{priorityLabel(issue.priority)}</span>
               </MenuButton>
-              {menu.submenu === "priority" ? (
-                <div className="mb-1 ml-2 rounded-md bg-white/[0.03] p-1">
-                  {PRIORITIES.map((priority) => (
-                    <MenuButton
-                      key={priority}
-                      active={priority === issue.priority}
-                      onClick={() => void patch({ issueId: issue._id, priority })}
-                    >
-                      <PriorityIcon priority={priority} />
-                      {priorityLabel(priority)}
-                    </MenuButton>
-                  ))}
-                </div>
-              ) : null}
+              <Submenu open={menu.submenu === "priority"}>
+                {PRIORITIES.map((priority) => (
+                  <MenuButton
+                    key={priority}
+                    active={priority === issue.priority}
+                    onClick={() => void patch({ issueId: issue._id, priority })}
+                  >
+                    <PriorityIcon priority={priority} />
+                    {priorityLabel(priority)}
+                  </MenuButton>
+                ))}
+              </Submenu>
               <div className="-mx-1 my-1 h-px bg-border" />
               <MenuButton destructive onClick={() => void onDelete()}>
                 <Trash2 />
@@ -180,6 +176,26 @@ export default function IssueContextMenu({
             document.body,
           )
         : null}
+    </div>
+  );
+}
+
+function Submenu({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div
+      className="grid transition-[grid-template-rows,opacity] duration-200 ease-out"
+      style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+    >
+      <div
+        className={cn(
+          "overflow-hidden transition-opacity duration-200",
+          open ? "opacity-100" : "opacity-0",
+        )}
+      >
+        <div className="mb-1 ml-2 rounded-md bg-white/[0.03] p-1">
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
