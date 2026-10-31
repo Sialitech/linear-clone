@@ -47,7 +47,7 @@ export default function IssueList({
 
   useEffect(() => {
     setSelection((current) => {
-      const live = new Set(orderedIds);
+      const live = new Set<string>(orderedIds);
       const nextSelected = current.selected.filter((id) => live.has(id));
       const anchorId = current.anchorId && live.has(current.anchorId) ? current.anchorId : null;
       if (nextSelected.length === current.selected.length && anchorId === current.anchorId) return current;
