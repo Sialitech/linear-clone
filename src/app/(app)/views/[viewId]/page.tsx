@@ -1,4 +1,4 @@
-import { SavedViewScreen } from "@/components/views-screen";
+import SavedViewScreen from "@/components/views-screen";
 
 export default async function ViewPage({
   params,

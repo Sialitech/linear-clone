@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireWorkspaceMember } from "./lib/access";
 import {
   assigneeModeSchema,
@@ -13,14 +14,49 @@ import {
   zQuery,
 } from "./lib/functions";
 
+function isPlainView(view: Doc<"views">) {
+  return (
+    view.projectId === undefined &&
+    view.status === undefined &&
+    view.priority === undefined &&
+    view.labelId === undefined &&
+    view.assigneeId === undefined
+  );
+}
+
+function viewRank(view: Doc<"views">) {
+  if (isPlainView(view) && view.assigneeMode === "anyone") return 0;
+  if (isPlainView(view) && view.assigneeMode === "me") return 1;
+  return 2;
+}
+
+function isSeededHighPriority(view: Doc<"views">) {
+  return (
+    view.name === "High priority" &&
+    view.priority === "high" &&
+    view.assigneeMode === "anyone" &&
+    view.projectId === undefined &&
+    view.status === undefined &&
+    view.labelId === undefined &&
+    view.assigneeId === undefined
+  );
+}
+
+function canManageView(ownerId: Id<"users">, userId: Id<"users">, role: "owner" | "admin" | "member") {
+  return ownerId === userId || role === "owner" || role === "admin";
+}
+
 export const list = zQuery({
   args: { workspaceId: workspaceIdSchema },
   handler: async (ctx, args) => {
     await requireWorkspaceMember(ctx, args.workspaceId);
-    return await ctx.db
+    const views = await ctx.db
       .query("views")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
       .take(100);
+    return views
+      .filter((view) => !isSeededHighPriority(view))
+      .sort((a, b) => viewRank(a) - viewRank(b) || a.createdAt - b.createdAt);
   },
 });
 
@@ -80,11 +116,44 @@ export const remove = zMutation({
     const view = await ctx.db.get("views", args.viewId);
     if (!view) throw new Error("View not found");
     const { userId, membership } = await requireWorkspaceMember(ctx, view.workspaceId);
-    const canModerate = membership.role === "owner" || membership.role === "admin";
-    if (view.ownerId !== userId && !canModerate) {
+    if (!canManageView(view.ownerId, userId, membership.role)) {
       throw new Error("You cannot delete this view");
     }
     await ctx.db.delete("views", view._id);
     return view._id;
+  },
+});
+
+export const rename = zMutation({
+  args: {
+    viewId: viewIdSchema,
+    name: z.string().trim().min(1).max(80),
+  },
+  handler: async (ctx, args) => {
+    const view = await ctx.db.get("views", args.viewId);
+    if (!view) throw new Error("View not found");
+    const { userId, membership } = await requireWorkspaceMember(ctx, view.workspaceId);
+    if (!canManageView(view.ownerId, userId, membership.role)) {
+      throw new Error("You cannot rename this view");
+    }
+    await ctx.db.patch("views", view._id, { name: args.name });
+    return view._id;
+  },
+});
+
+export const pruneSeeded = zMutation({
+  args: { workspaceId: workspaceIdSchema },
+  handler: async (ctx, args) => {
+    const { userId, membership } = await requireWorkspaceMember(ctx, args.workspaceId);
+    const views = await ctx.db
+      .query("views")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(100);
+    for (const view of views) {
+      if (!isSeededHighPriority(view)) continue;
+      if (!canManageView(view.ownerId, userId, membership.role)) continue;
+      await ctx.db.delete("views", view._id);
+    }
+    return null;
   },
 });
