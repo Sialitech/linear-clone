@@ -29,6 +29,7 @@ import {
   Kanban,
   LogOut,
   Plus,
+  RefreshCw,
   Settings,
   SquarePen,
   X,
@@ -117,6 +118,10 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
         <NavLink href="/projects" active={pathname === "/projects"} onNavigate={onNavigate} roomy={roomy}>
           <Kanban className="size-3.5" />
           Projects
+        </NavLink>
+        <NavLink href="/cycles" active={pathname === "/cycles"} onNavigate={onNavigate} roomy={roomy}>
+          <RefreshCw className="size-3.5" />
+          Cycles
         </NavLink>
       </nav>
 
