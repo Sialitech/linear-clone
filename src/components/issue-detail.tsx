@@ -18,16 +18,27 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { dateInputToTimestamp, dateInputValue, errorMessage, formatDue, isOverdue } from "@/lib/format";
+import {
+  activeMentionIds,
+  filterMembers,
+  findMentionQuery,
+  memberMentionLabel,
+  mentionToken,
+  segmentCommentMentions,
+  type MentionMember,
+} from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { z } from "zod";
 
 const commentSchema = z.string().trim().min(1, "Write a comment").max(10000);
+
+type PendingMention = { userId: Id<"users">; token: string };
 
 export default function IssueDetail({ issueId }: { issueId: string }) {
   const id = issueId as Id<"issues">;
@@ -45,8 +56,10 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   const updateComment = useMutation(api.comments.update);
   const removeComment = useMutation(api.comments.remove);
   const [comment, setComment] = useState("");
+  const [pendingMentions, setPendingMentions] = useState<PendingMention[]>([]);
   const [editingComment, setEditingComment] = useState<Id<"comments"> | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [editingMentions, setEditingMentions] = useState<PendingMention[]>([]);
 
   async function patch(args: Parameters<typeof update>[0]) {
     try {
@@ -64,8 +77,13 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
       return;
     }
     try {
-      await createComment({ issueId: id, content: parsed.data });
+      await createComment({
+        issueId: id,
+        content: parsed.data,
+        mentionIds: activeMentionIds(parsed.data, pendingMentions),
+      });
       setComment("");
+      setPendingMentions([]);
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -87,6 +105,8 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   if (issue === null) {
     return <div className="p-6 text-sm text-muted-foreground">Issue not found.</div>;
   }
+
+  const memberList = members ?? [];
 
   return (
     <IssueContextMenu issue={issue}>
@@ -138,6 +158,15 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                           onClick={() => {
                             setEditingComment(item._id);
                             setEditingText(item.content);
+                            setEditingMentions(
+                              item.mentionIds
+                                .map((mentionId) => {
+                                  const member = memberList.find((entry) => entry._id === mentionId);
+                                  if (!member) return null;
+                                  return { userId: mentionId, token: mentionToken(member) };
+                                })
+                                .filter((entry): entry is PendingMention => entry !== null),
+                            );
                           }}
                         >
                           Edit
@@ -158,25 +187,47 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                           event.preventDefault();
                           const parsed = commentSchema.safeParse(editingText);
                           if (!parsed.success) return;
-                          void updateComment({ commentId: item._id, content: parsed.data })
-                            .then(() => setEditingComment(null))
+                          void updateComment({
+                            commentId: item._id,
+                            content: parsed.data,
+                            mentionIds: activeMentionIds(parsed.data, editingMentions),
+                          })
+                            .then(() => {
+                              setEditingComment(null);
+                              setEditingMentions([]);
+                            })
                             .catch((error: unknown) => toast.error(errorMessage(error)));
                         }}
                       >
-                        <Textarea value={editingText} onChange={(event) => setEditingText(event.target.value)} />
+                        <MentionComposer
+                          value={editingText}
+                          members={memberList}
+                          pending={editingMentions}
+                          onChange={setEditingText}
+                          onPendingChange={setEditingMentions}
+                        />
                         <Button type="submit" size="sm">Save</Button>
                       </form>
                     ) : (
-                      <p className="mt-1 text-sm whitespace-pre-wrap">{item.content}</p>
+                      <p className="mt-1 text-sm whitespace-pre-wrap">
+                        <CommentBody
+                          content={item.content}
+                          mentionIds={item.mentionIds}
+                          members={memberList}
+                        />
+                      </p>
                     )}
                   </div>
                 </article>
               ))}
             </div>
             <form onSubmit={onComment} className="mt-4 space-y-2">
-              <Textarea
+              <MentionComposer
                 value={comment}
-                onChange={(event) => setComment(event.target.value)}
+                members={memberList}
+                pending={pendingMentions}
+                onChange={setComment}
+                onPendingChange={setPendingMentions}
                 placeholder="Leave a comment"
               />
               <Button type="submit" size="sm">Comment</Button>
@@ -278,6 +329,160 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
         {label}
       </div>
       {children}
+    </div>
+  );
+}
+
+function CommentBody({
+  content,
+  mentionIds,
+  members,
+}: {
+  content: string;
+  mentionIds: Id<"users">[];
+  members: MentionMember[];
+}) {
+  const segments = useMemo(
+    () => segmentCommentMentions(content, mentionIds, members),
+    [content, mentionIds, members],
+  );
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.type === "mention" ? (
+          <span
+            key={`${segment.userId}-${index}`}
+            className="rounded-sm bg-white/10 px-0.5 text-foreground"
+          >
+            {segment.value}
+          </span>
+        ) : (
+          <span key={`t-${index}`}>{segment.value}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function MentionComposer({
+  value,
+  members,
+  pending,
+  onChange,
+  onPendingChange,
+  placeholder,
+}: {
+  value: string;
+  members: MentionMember[];
+  pending: PendingMention[];
+  onChange: (value: string) => void;
+  onPendingChange: (pending: PendingMention[]) => void;
+  placeholder?: string;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [caret, setCaret] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [escaped, setEscaped] = useState(false);
+  const query = findMentionQuery(value, caret);
+  const options = useMemo(
+    () => (query ? filterMembers(members, query.query).slice(0, 8) : []),
+    [members, query],
+  );
+  const open = Boolean(query) && options.length > 0 && !escaped;
+
+  function selectMember(member: MentionMember) {
+    if (!query || !textareaRef.current) return;
+    const token = mentionToken(member);
+    const before = value.slice(0, query.start);
+    const after = value.slice(query.end);
+    const next = `${before}${token} ${after}`;
+    const nextCaret = before.length + token.length + 1;
+    onChange(next);
+    onPendingChange([
+      ...pending.filter((item) => item.userId !== member._id),
+      { userId: member._id, token },
+    ]);
+    setActiveIndex(0);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(nextCaret, nextCaret);
+      setCaret(nextCaret);
+    });
+  }
+
+  return (
+    <div className="relative">
+      <Textarea
+        ref={textareaRef}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setCaret(event.target.selectionStart);
+          setActiveIndex(0);
+          setEscaped(false);
+        }}
+        onClick={(event) => {
+          setCaret(event.currentTarget.selectionStart);
+          setEscaped(false);
+        }}
+        onKeyUp={(event) => setCaret(event.currentTarget.selectionStart)}
+        onKeyDown={(event) => {
+          if (!open) return;
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setActiveIndex((index) => (index + 1) % options.length);
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveIndex((index) => (index - 1 + options.length) % options.length);
+          } else if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            const member = options[activeIndex];
+            if (member) selectMember(member);
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            setEscaped(true);
+          }
+        }}
+      />
+      {open ? (
+        <ul
+          className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md"
+          role="listbox"
+        >
+          {options.map((member, index) => (
+            <li key={member._id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={index === activeIndex}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
+                  index === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
+                )}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectMember(member);
+                }}
+              >
+                <UserAvatar
+                  user={{
+                    name: member.name ?? null,
+                    email: member.email ?? null,
+                    image: member.image ?? null,
+                  }}
+                />
+                <span className="min-w-0 truncate">{memberMentionLabel(member)}</span>
+                {member.email ? (
+                  <span className="ml-auto truncate text-xs text-muted-foreground">{member.email}</span>
+                ) : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
