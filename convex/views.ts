@@ -9,6 +9,7 @@ import {
   projectIdSchema,
   userIdSchema,
   viewGroupSchema,
+  viewOrderSchema,
   viewIdSchema,
   workspaceIdSchema,
   zMutation,
@@ -121,6 +122,8 @@ export const update = zMutation({
     assigneeId: userIdSchema.nullable(),
     labelId: labelIdSchema.nullable(),
     groupBy: viewGroupSchema.nullable(),
+    subGroupBy: viewGroupSchema.nullable(),
+    orderBy: viewOrderSchema.nullable(),
   },
   handler: async (ctx, args) => {
     const view = await ctx.db.get("views", args.viewId);
@@ -162,6 +165,8 @@ export const update = zMutation({
       assigneeId,
       labelId: args.labelId ?? undefined,
       groupBy: args.groupBy ?? undefined,
+      subGroupBy: args.subGroupBy && args.subGroupBy !== args.groupBy ? args.subGroupBy : undefined,
+      orderBy: args.orderBy ?? undefined,
     });
     return view._id;
   },

@@ -5,6 +5,8 @@ import { groupIssues, type GroupableIssue } from "../src/lib/issue-groups.ts";
 function issue(overrides: Partial<GroupableIssue> & Pick<GroupableIssue, "_id">): GroupableIssue {
   return {
     updatedAt: 1,
+    createdAt: 1,
+    dueDate: null,
     status: "todo",
     priority: "none",
     projectId: "project-a",
@@ -85,6 +87,23 @@ describe("groupIssues", () => {
     assert.deepEqual(
       groups.map((group) => group.label),
       ["Alpha", "Beta"],
+    );
+  });
+
+  it("orders issues inside a group by priority", () => {
+    const person = { _id: "u", name: "Ana", email: null };
+    const groups = groupIssues(
+      [
+        issue({ _id: "a", priority: "low", assignee: person }),
+        issue({ _id: "b", priority: "urgent", assignee: person }),
+        issue({ _id: "c", priority: "high", assignee: person }),
+      ],
+      "assignee",
+      "priority",
+    );
+    assert.deepEqual(
+      groups[0]?.issues.map((item) => item._id),
+      ["b", "c", "a"],
     );
   });
 });

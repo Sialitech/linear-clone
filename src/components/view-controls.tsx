@@ -7,10 +7,13 @@ import {
   PRIORITIES,
   VIEW_GROUPS,
   VIEW_GROUP_LABELS,
+  VIEW_ORDERS,
+  VIEW_ORDER_LABELS,
   type AssigneeMode,
   type IssueStatus,
   type Priority,
   type ViewGroup,
+  type ViewOrder,
 } from "@convex/model";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
@@ -32,7 +35,7 @@ import { errorMessage } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Check, CircleUser, FolderKanban, ListFilter, SignalHigh, SlidersHorizontal, Tag, X } from "lucide-react";
+import { ArrowUpDown, ChevronDown, CircleUser, FolderKanban, GitBranch, List, ListFilter, SignalHigh, SlidersHorizontal, Tag, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -46,6 +49,8 @@ type ViewLayout = {
   assigneeId: Id<"users"> | null;
   labelId: Id<"labels"> | null;
   groupBy: ViewGroup | null;
+  subGroupBy: ViewGroup | null;
+  orderBy: ViewOrder | null;
 };
 
 function layoutOf(view: SavedView): ViewLayout {
@@ -57,6 +62,8 @@ function layoutOf(view: SavedView): ViewLayout {
     assigneeId: view.assigneeId ?? null,
     labelId: view.labelId ?? null,
     groupBy: view.groupBy ?? null,
+    subGroupBy: view.subGroupBy ?? null,
+    orderBy: view.orderBy ?? null,
   };
 }
 
@@ -77,7 +84,7 @@ export default function ViewControls({
   view: SavedView;
   canEdit: boolean;
   title: string;
-  children: (groupBy: ViewGroup | null) => ReactNode;
+  children: (layout: { groupBy: ViewGroup | null; subGroupBy: ViewGroup | null; orderBy: ViewOrder }) => ReactNode;
 }) {
   const update = useMutation(api.views.update);
   const projects = useQuery(api.projects.list, { workspaceId: view.workspaceId });
@@ -90,6 +97,7 @@ export default function ViewControls({
   const sending = useRef(false);
   const dirty = useRef(false);
   const [display, setDisplay] = useState(server);
+  const [openMenu, setOpenMenu] = useState<"group" | "sub" | "order" | null>(null);
 
   useEffect(() => {
     if (sending.current || dirty.current) return;
@@ -119,6 +127,8 @@ export default function ViewControls({
         assigneeId: snapshot.assigneeId,
         labelId: snapshot.labelId,
         groupBy: snapshot.groupBy,
+        subGroupBy: snapshot.subGroupBy,
+        orderBy: snapshot.orderBy,
       });
     } catch (error) {
       sentKey.current = null;
@@ -350,7 +360,11 @@ export default function ViewControls({
                   </DropdownMenuSub>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Popover>
+              <Popover
+                onOpenChange={(open) => {
+                  if (!open) setOpenMenu(null);
+                }}
+              >
                 <PopoverTrigger
                   render={
                     <Button
@@ -365,21 +379,59 @@ export default function ViewControls({
                   <SlidersHorizontal className="size-3.5" />
                   Display
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-56 gap-1 p-1.5">
-                  <p className="px-2 py-1 text-xs text-muted-foreground">Grouping</p>
-                  <GroupOption
-                    label="No grouping"
-                    selected={display.groupBy === null}
-                    onSelect={() => commit({ groupBy: null })}
+                <PopoverContent align="end" className="w-80 gap-1 overflow-visible p-2">
+                  <DisplayField
+                    icon={<List className="size-3.5 text-muted-foreground" />}
+                    label="Grouping"
+                    valueLabel={display.groupBy ? VIEW_GROUP_LABELS[display.groupBy] : "No grouping"}
+                    open={openMenu === "group"}
+                    onToggle={() => setOpenMenu((current) => (current === "group" ? null : "group"))}
+                    options={[
+                      { value: "", label: "No grouping" },
+                      ...VIEW_GROUPS.map((group) => ({ value: group, label: VIEW_GROUP_LABELS[group] })),
+                    ]}
+                    selected={display.groupBy ?? ""}
+                    onSelect={(value) => {
+                      const groupBy = value === "" ? null : (value as ViewGroup);
+                      commit({
+                        groupBy,
+                        subGroupBy: display.subGroupBy === groupBy ? null : display.subGroupBy,
+                      });
+                      setOpenMenu(null);
+                    }}
                   />
-                  {VIEW_GROUPS.map((group) => (
-                    <GroupOption
-                      key={group}
-                      label={VIEW_GROUP_LABELS[group]}
-                      selected={display.groupBy === group}
-                      onSelect={() => commit({ groupBy: group })}
-                    />
-                  ))}
+                  <DisplayField
+                    icon={<GitBranch className="size-3.5 text-muted-foreground" />}
+                    label="Sub-grouping"
+                    valueLabel={display.subGroupBy ? VIEW_GROUP_LABELS[display.subGroupBy] : "No grouping"}
+                    open={openMenu === "sub"}
+                    onToggle={() => setOpenMenu((current) => (current === "sub" ? null : "sub"))}
+                    options={[
+                      { value: "", label: "No grouping" },
+                      ...VIEW_GROUPS.filter((group) => group !== display.groupBy).map((group) => ({
+                        value: group,
+                        label: VIEW_GROUP_LABELS[group],
+                      })),
+                    ]}
+                    selected={display.subGroupBy ?? ""}
+                    onSelect={(value) => {
+                      commit({ subGroupBy: value === "" ? null : (value as ViewGroup) });
+                      setOpenMenu(null);
+                    }}
+                  />
+                  <DisplayField
+                    icon={<ArrowUpDown className="size-3.5 text-muted-foreground" />}
+                    label="Ordering"
+                    valueLabel={VIEW_ORDER_LABELS[display.orderBy ?? "priority"]}
+                    open={openMenu === "order"}
+                    onToggle={() => setOpenMenu((current) => (current === "order" ? null : "order"))}
+                    options={VIEW_ORDERS.map((order) => ({ value: order, label: VIEW_ORDER_LABELS[order] }))}
+                    selected={display.orderBy ?? "priority"}
+                    onSelect={(value) => {
+                      commit({ orderBy: value === "priority" ? null : (value as ViewOrder) });
+                      setOpenMenu(null);
+                    }}
+                  />
                 </PopoverContent>
               </Popover>
             </div>
@@ -413,32 +465,76 @@ export default function ViewControls({
           </div>
         ) : null}
       </div>
-      {children(display.groupBy)}
+      {children({
+        groupBy: display.groupBy,
+        subGroupBy: display.subGroupBy,
+        orderBy: display.orderBy ?? "priority",
+      })}
     </>
   );
 }
 
-function GroupOption({
+function DisplayField({
+  icon,
   label,
+  valueLabel,
+  open,
+  onToggle,
+  options,
   selected,
   onSelect,
 }: {
+  icon: ReactNode;
   label: string;
-  selected: boolean;
-  onSelect: () => void;
+  valueLabel: string;
+  open: boolean;
+  onToggle: () => void;
+  options: { value: string; label: string }[];
+  selected: string;
+  onSelect: (value: string) => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
-      className={cn(
-        "flex h-8 items-center justify-between rounded-md px-2 text-left text-sm hover:bg-white/5",
-        selected && "bg-white/8 text-foreground",
-      )}
-    >
-      {label}
-      {selected ? <Check className="size-3.5 text-muted-foreground" /> : null}
-    </button>
+    <div className="flex items-center justify-between gap-3 px-1.5 py-1">
+      <span className="flex min-w-0 items-center gap-2 text-sm">
+        {icon}
+        {label}
+      </span>
+      <div className="relative">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-label={label}
+          onClick={onToggle}
+          className="inline-flex h-7 w-36 items-center justify-between gap-1 rounded-md bg-white/[0.06] px-2 text-xs hover:bg-white/10"
+        >
+          <span className="truncate">{valueLabel}</span>
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+        </button>
+        {open ? (
+          <div
+            role="listbox"
+            aria-label={label}
+            className="absolute top-8 right-0 z-20 w-40 rounded-md bg-popover p-1 shadow-lg ring-1 ring-foreground/10"
+          >
+            {options.map((option) => (
+              <button
+                key={option.value || "none"}
+                type="button"
+                role="option"
+                aria-selected={selected === option.value}
+                onClick={() => onSelect(option.value)}
+                className={cn(
+                  "flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-white/8",
+                  selected === option.value && "bg-white/8",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }

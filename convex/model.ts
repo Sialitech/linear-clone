@@ -41,6 +41,18 @@ export const VIEW_GROUP_LABELS: Record<ViewGroup, string> = {
   project: "Project",
 };
 
+export const VIEW_ORDERS = ["priority", "status", "updated", "created", "due"] as const;
+
+export type ViewOrder = (typeof VIEW_ORDERS)[number];
+
+export const VIEW_ORDER_LABELS: Record<ViewOrder, string> = {
+  priority: "Priority",
+  status: "Status",
+  updated: "Updated",
+  created: "Created",
+  due: "Due date",
+};
+
 export const CYCLE_STATUSES = ["upcoming", "active", "completed"] as const;
 
 export type CycleStatus = (typeof CYCLE_STATUSES)[number];

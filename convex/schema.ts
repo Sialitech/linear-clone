@@ -46,6 +46,14 @@ const viewGroup = v.union(
   v.literal("project"),
 );
 
+const viewOrder = v.union(
+  v.literal("priority"),
+  v.literal("status"),
+  v.literal("updated"),
+  v.literal("created"),
+  v.literal("due"),
+);
+
 const cycleStatus = v.union(
   v.literal("upcoming"),
   v.literal("active"),
@@ -183,6 +191,8 @@ export default defineSchema({
     assigneeId: v.optional(v.id("users")),
     labelId: v.optional(v.id("labels")),
     groupBy: v.optional(viewGroup),
+    subGroupBy: v.optional(viewGroup),
+    orderBy: v.optional(viewOrder),
     createdAt: v.number(),
   })
     .index("by_workspace", ["workspaceId"])

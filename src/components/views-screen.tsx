@@ -10,7 +10,7 @@ import UserAvatar from "@/components/user-avatar";
 import ViewControls from "@/components/view-controls";
 import { useWorkspace } from "@/components/workspace-provider";
 import { projectColor } from "@/lib/format";
-import { groupIssues } from "@/lib/issue-groups";
+import { groupIssues, sortIssues } from "@/lib/issue-groups";
 import type { IssueItem } from "@/lib/types";
 import { useQuery } from "convex/react";
 import type { ReactNode } from "react";
@@ -72,20 +72,32 @@ export default function SavedViewScreen({ viewId }: { viewId: string }) {
     <div className="flex h-full min-h-0 flex-col">
       {view ? (
         <ViewControls view={view} canEdit={canEdit} title={view.name}>
-          {(groupBy) => (
-            <IssueList
-              issues={issues}
-              empty={hasFilter ? "No issues match these filters." : "No issues in this view."}
-              groups={
-                groupBy && issues
-                  ? groupIssues(issues, groupBy).map((group) => ({
-                      ...group,
-                      icon: group.issues[0] ? groupIcon(groupBy, group.issues[0]) : undefined,
-                    }))
-                  : undefined
-              }
-            />
-          )}
+          {({ groupBy, subGroupBy, orderBy }) => {
+            const ordered = issues ? sortIssues(issues, orderBy) : undefined;
+            const nestedBy = subGroupBy && subGroupBy !== groupBy ? subGroupBy : null;
+            return (
+              <IssueList
+                issues={ordered}
+                preserveOrder
+                empty={hasFilter ? "No issues match these filters." : "No issues in this view."}
+                groups={
+                  groupBy && ordered
+                    ? groupIssues(ordered, groupBy, orderBy).map((group) => ({
+                        ...group,
+                        icon: group.issues[0] ? groupIcon(groupBy, group.issues[0]) : undefined,
+                        groups: nestedBy
+                          ? groupIssues(group.issues, nestedBy, orderBy).map((subgroup) => ({
+                              ...subgroup,
+                              key: `${group.key}:${subgroup.key}`,
+                              icon: subgroup.issues[0] ? groupIcon(nestedBy, subgroup.issues[0]) : undefined,
+                            }))
+                          : undefined,
+                      }))
+                    : undefined
+                }
+              />
+            );
+          }}
         </ViewControls>
       ) : (
         <>
