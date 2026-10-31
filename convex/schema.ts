@@ -125,4 +125,35 @@ export default defineSchema({
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_and_owner", ["workspaceId", "ownerId"]),
+  githubConnections: defineTable({
+    userId: v.id("users"),
+    accessToken: v.string(),
+    githubLogin: v.optional(v.string()),
+    githubUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+  projectRepos: defineTable({
+    projectId: v.id("projects"),
+    workspaceId: v.id("workspaces"),
+    owner: v.string(),
+    name: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_workspace", ["workspaceId"]),
+  pullRequests: defineTable({
+    issueId: v.id("issues"),
+    workspaceId: v.id("workspaces"),
+    owner: v.string(),
+    repo: v.string(),
+    number: v.number(),
+    url: v.string(),
+    title: v.optional(v.string()),
+    state: v.optional(v.string()),
+    linkedById: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_issue", ["issueId"]),
 });

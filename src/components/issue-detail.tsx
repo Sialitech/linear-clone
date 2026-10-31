@@ -16,10 +16,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { dateInputToTimestamp, dateInputValue, errorMessage, formatDue, isOverdue } from "@/lib/format";
+import { issueBranchName } from "@/lib/github";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { Copy, ExternalLink, GitBranch, GitPullRequest } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -35,6 +38,8 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   const { workspace, openEdit, me } = useWorkspace();
   const issue = useQuery(api.issues.get, { issueId: id });
   const comments = useQuery(api.comments.list, issue ? { issueId: id } : "skip");
+  const pullRequests = useQuery(api.github.listPullRequests, issue ? { issueId: id } : "skip");
+  const oauthStatus = useQuery(api.github.oauthStatus, {});
   const members = useQuery(
     api.users.listMembers,
     workspace ? { workspaceId: workspace._id } : "skip",
@@ -44,9 +49,13 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   const createComment = useMutation(api.comments.create);
   const updateComment = useMutation(api.comments.update);
   const removeComment = useMutation(api.comments.remove);
+  const linkPullRequest = useMutation(api.github.linkPullRequest);
+  const unlinkPullRequest = useMutation(api.github.unlinkPullRequest);
+  const refreshPullRequest = useAction(api.githubActions.refreshPullRequest);
   const [comment, setComment] = useState("");
   const [editingComment, setEditingComment] = useState<Id<"comments"> | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [prUrl, setPrUrl] = useState("");
 
   async function patch(args: Parameters<typeof update>[0]) {
     try {
@@ -81,12 +90,39 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     }
   }
 
+  async function onCopyBranch() {
+    if (!issue) return;
+    const branch = issueBranchName(issue.identifier, issue.title);
+    try {
+      await navigator.clipboard.writeText(branch);
+      toast.success("Branch name copied");
+    } catch {
+      toast.error("Could not copy branch name");
+    }
+  }
+
+  async function onLinkPr(event: React.FormEvent) {
+    event.preventDefault();
+    try {
+      const pullRequestId = await linkPullRequest({ issueId: id, url: prUrl });
+      setPrUrl("");
+      toast.success("Pull request linked");
+      if (oauthStatus?.connected) {
+        void refreshPullRequest({ pullRequestId }).catch(() => undefined);
+      }
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
   if (issue === undefined) {
     return <div className="p-6 text-sm text-muted-foreground">Loading issue…</div>;
   }
   if (issue === null) {
     return <div className="p-6 text-sm text-muted-foreground">Issue not found.</div>;
   }
+
+  const branch = issueBranchName(issue.identifier, issue.title);
 
   return (
     <IssueContextMenu issue={issue}>
@@ -108,6 +144,20 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto pb-[env(safe-area-inset-bottom)] lg:grid-cols-[minmax(0,1fr)_280px] lg:overflow-hidden lg:pb-0">
         <div className="px-4 py-4 sm:px-6 sm:py-5 lg:min-h-0 lg:overflow-auto">
           <h1 className="text-xl font-medium tracking-tight">{issue.title}</h1>
+          <div className="mt-3 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            <GitBranch className="size-3.5 shrink-0" />
+            <code className="min-w-0 truncate font-mono text-[11px] text-foreground/80">{branch}</code>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 px-2"
+              onClick={() => void onCopyBranch()}
+            >
+              <Copy className="size-3.5" />
+              Copy
+            </Button>
+          </div>
           <div className="prose-invert mt-4 text-sm leading-6 text-foreground/90 [&_code]:rounded [&_code]:bg-white/8 [&_code]:px-1 [&_h1]:mb-2 [&_h1]:text-lg [&_h2]:mb-2 [&_h2]:text-base [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
             {issue.description ? (
               <ReactMarkdown>{issue.description}</ReactMarkdown>
@@ -115,6 +165,67 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
               <p className="text-muted-foreground">No description yet.</p>
             )}
           </div>
+          <section className="mt-8">
+            <div className="mb-3 flex items-center gap-2">
+              <GitPullRequest className="size-3.5 text-muted-foreground" />
+              <h2 className="text-sm font-medium">Pull requests</h2>
+            </div>
+            <div className="space-y-2">
+              {pullRequests?.map((pr) => (
+                <div
+                  key={pr._id}
+                  className="flex min-w-0 items-center gap-2 text-sm"
+                >
+                  <a
+                    href={pr.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex min-w-0 flex-1 items-center gap-2 hover:text-foreground"
+                  >
+                    <span className="font-mono text-xs text-muted-foreground">
+                      #{pr.number}
+                    </span>
+                    <span className="min-w-0 truncate">
+                      {pr.title || `${pr.owner}/${pr.repo}`}
+                    </span>
+                    {pr.state ? (
+                      <span className="shrink-0 text-[11px] text-muted-foreground capitalize">
+                        {pr.state}
+                      </span>
+                    ) : null}
+                    <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
+                  </a>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 px-2 text-xs"
+                    onClick={() =>
+                      void unlinkPullRequest({ pullRequestId: pr._id })
+                        .then(() => toast.success("Pull request unlinked"))
+                        .catch((error: unknown) => toast.error(errorMessage(error)))
+                    }
+                  >
+                    Unlink
+                  </Button>
+                </div>
+              ))}
+              {pullRequests?.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No pull requests linked yet.</p>
+              ) : null}
+            </div>
+            <form onSubmit={onLinkPr} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                value={prUrl}
+                onChange={(event) => setPrUrl(event.target.value)}
+                placeholder="https://github.com/owner/repo/pull/123"
+                className="h-9 sm:h-8"
+              />
+              <Button type="submit" size="sm" className="shrink-0">
+                Link PR
+              </Button>
+            </form>
+          </section>
           <section className="mt-10">
             <div className="mb-3 flex items-center gap-2">
               <h2 className="text-sm font-medium">Comments</h2>

@@ -40,6 +40,21 @@ In Google Cloud, the authorized redirect URI is:
 https://<your-deployment>.convex.site/api/auth/callback/google
 ```
 
+### GitHub connection (optional)
+
+Issue branch names and pasted PR links work without GitHub OAuth. To let users connect a GitHub account (for enriching linked PR title/state), set these on the **Convex** deployment only — never as `NEXT_PUBLIC_*`:
+
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+
+In the GitHub OAuth App, the authorization callback URL is:
+
+```text
+{SITE_URL}/settings
+```
+
+If those env vars are missing, Settings reports that OAuth is not configured and the rest of the GitHub UI still works.
+
 ## Deploy on Vercel
 
 1. Create a project on [Vercel](https://vercel.com) and link this repository.
