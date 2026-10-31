@@ -52,6 +52,7 @@ type Draft = {
   assigneeId: Id<"users"> | null;
   labelIds: Id<"labels">[];
   dueDate: string;
+  cycleId: Id<"cycles"> | null;
 };
 
 const emptyDraft = (projectId?: Id<"projects">): Draft => ({
@@ -63,6 +64,7 @@ const emptyDraft = (projectId?: Id<"projects">): Draft => ({
   assigneeId: null,
   labelIds: [],
   dueDate: "",
+  cycleId: null,
 });
 
 export default function IssueComposer() {
@@ -79,6 +81,10 @@ export default function IssueComposer() {
     workspace ? { workspaceId: workspace._id } : "skip",
   );
   const labels = useQuery(api.labels.list, workspace ? { workspaceId: workspace._id } : "skip");
+  const assignableCycles = useQuery(
+    api.cycles.listAssignable,
+    workspace ? { workspaceId: workspace._id } : "skip",
+  );
   const createIssue = useMutation(api.issues.create);
   const updateIssue = useMutation(api.issues.update);
   const createLabel = useMutation(api.labels.create);
@@ -112,6 +118,7 @@ export default function IssueComposer() {
       assigneeId: issue.assignee?._id ?? null,
       labelIds: issue.labels.map((label) => label._id),
       dueDate: dateInputValue(issue.dueDate),
+      cycleId: issue.cycleId ?? null,
     });
   }, [issue, composer]);
 
@@ -176,6 +183,7 @@ export default function IssueComposer() {
           assigneeId: draft.assigneeId,
           labelIds: draft.labelIds,
           dueDate,
+          cycleId: draft.cycleId,
         });
       } else {
         await createIssue({
@@ -187,6 +195,7 @@ export default function IssueComposer() {
           assigneeId: draft.assigneeId,
           labelIds: draft.labelIds,
           dueDate,
+          cycleId: draft.cycleId,
         });
       }
       closeComposer();
@@ -216,6 +225,9 @@ export default function IssueComposer() {
 
   const assignee = members?.find((member) => member._id === draft.assigneeId) ?? null;
   const selectedLabels = labels?.filter((label) => draft.labelIds.includes(label._id)) ?? [];
+  const selectedCycle =
+    assignableCycles?.find((cycle) => cycle._id === draft.cycleId) ??
+    (issue?.cycleId === draft.cycleId ? issue.cycle : null);
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) closeComposer(); }}>
@@ -362,6 +374,26 @@ export default function IssueComposer() {
               onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))}
               className="h-9 w-full text-base sm:h-7 sm:w-36 sm:text-xs"
             />
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button type="button" variant="outline" size="sm" />}>
+                {selectedCycle ? `Cycle ${selectedCycle.number}` : "No cycle"}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem
+                  onClick={() => setDraft((current) => ({ ...current, cycleId: null }))}
+                >
+                  No cycle
+                </DropdownMenuItem>
+                {assignableCycles?.map((cycle) => (
+                  <DropdownMenuItem
+                    key={cycle._id}
+                    onClick={() => setDraft((current) => ({ ...current, cycleId: cycle._id }))}
+                  >
+                    Cycle {cycle.number}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <select
               value={draft.projectId}
               onChange={(event) =>

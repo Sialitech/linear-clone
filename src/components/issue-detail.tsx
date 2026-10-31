@@ -39,6 +39,10 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     api.users.listMembers,
     workspace ? { workspaceId: workspace._id } : "skip",
   );
+  const assignableCycles = useQuery(
+    api.cycles.listAssignable,
+    workspace ? { workspaceId: workspace._id } : "skip",
+  );
   const update = useMutation(api.issues.update);
   const remove = useMutation(api.issues.remove);
   const createComment = useMutation(api.comments.create);
@@ -262,6 +266,34 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                 issue.dueDate && isOverdue(issue.dueDate, issue.status) && "text-destructive",
               )}
             />
+          </Field>
+          <Field label="Cycle">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="sm" />}>
+                {issue.cycle ? `Cycle ${issue.cycle.number}` : "No cycle"}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => void patch({ issueId: id, cycleId: null })}>
+                  No cycle
+                </DropdownMenuItem>
+                {assignableCycles?.map((cycle) => (
+                  <DropdownMenuItem
+                    key={cycle._id}
+                    onClick={() => void patch({ issueId: id, cycleId: cycle._id })}
+                  >
+                    Cycle {cycle.number}
+                  </DropdownMenuItem>
+                ))}
+                {issue.cycle?.status === "completed" &&
+                !assignableCycles?.some((cycle) => cycle._id === issue.cycle?._id) ? (
+                  <DropdownMenuItem
+                    onClick={() => void patch({ issueId: id, cycleId: issue.cycle!._id })}
+                  >
+                    Cycle {issue.cycle.number}
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </Field>
           </div>
         </aside>

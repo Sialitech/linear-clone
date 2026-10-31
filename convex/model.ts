@@ -30,6 +30,16 @@ export const ASSIGNEE_MODES = ["anyone", "me", "unassigned", "user"] as const;
 
 export type AssigneeMode = (typeof ASSIGNEE_MODES)[number];
 
+export const CYCLE_STATUSES = ["upcoming", "active", "completed"] as const;
+
+export type CycleStatus = (typeof CYCLE_STATUSES)[number];
+
+export const CYCLE_STATUS_LABELS: Record<CycleStatus, string> = {
+  upcoming: "Upcoming",
+  active: "Active",
+  completed: "Completed",
+};
+
 export const ISSUE_STATUS_LABELS: Record<IssueStatus, string> = {
   backlog: "Backlog",
   todo: "Todo",

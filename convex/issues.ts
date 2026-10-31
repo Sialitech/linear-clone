@@ -8,7 +8,9 @@ import {
   requireWorkspaceMember,
   type ReadCtx,
 } from "./lib/access";
+import { assertAssignableCycle } from "./cycles";
 import {
+  cycleIdSchema,
   issueIdSchema,
   issueStatusSchema,
   labelIdSchema,
@@ -57,6 +59,16 @@ async function enrichIssues(ctx: QueryCtx, issues: Doc<"issues">[]) {
   const users = new Map<string, Awaited<ReturnType<typeof loadPublicUser>>>();
   const labels = new Map<string, { _id: Id<"labels">; name: string; color: string } | null>();
   const projects = new Map<string, Doc<"projects"> | null>();
+  const cycles = new Map<
+    string,
+    {
+      _id: Id<"cycles">;
+      number: number;
+      status: Doc<"cycles">["status"];
+      startsAt: number;
+      endsAt: number;
+    } | null
+  >();
 
   async function userOf(userId: Id<"users"> | undefined) {
     if (!userId) return null;
@@ -86,6 +98,24 @@ async function enrichIssues(ctx: QueryCtx, issues: Doc<"issues">[]) {
     return project;
   }
 
+  async function cycleOf(cycleId: Id<"cycles"> | undefined) {
+    if (!cycleId) return null;
+    const cached = cycles.get(cycleId);
+    if (cached !== undefined) return cached;
+    const cycle = await ctx.db.get("cycles", cycleId);
+    const value = cycle
+      ? {
+          _id: cycle._id,
+          number: cycle.number,
+          status: cycle.status,
+          startsAt: cycle.startsAt,
+          endsAt: cycle.endsAt,
+        }
+      : null;
+    cycles.set(cycleId, value);
+    return value;
+  }
+
   const enriched = [];
   for (const issue of issues) {
     const project = await projectOf(issue.projectId);
@@ -105,6 +135,8 @@ async function enrichIssues(ctx: QueryCtx, issues: Doc<"issues">[]) {
       order: issue.order,
       number: issue.number,
       dueDate: issue.dueDate ?? null,
+      cycleId: issue.cycleId ?? null,
+      cycle: await cycleOf(issue.cycleId),
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
       identifier: `${project?.key ?? "ISS"}-${issue.number}`,
@@ -127,6 +159,7 @@ function matchesFilters(
     priority?: Doc<"issues">["priority"];
     assigneeId?: Id<"users">;
     labelId?: Id<"labels">;
+    cycleId?: Id<"cycles">;
     unassigned?: boolean;
   },
 ) {
@@ -137,6 +170,7 @@ function matchesFilters(
   if (args.assigneeId && issue.assigneeId !== args.assigneeId) return false;
   if (args.unassigned && issue.assigneeId !== undefined) return false;
   if (args.labelId && !issue.labelIds.includes(args.labelId)) return false;
+  if (args.cycleId && issue.cycleId !== args.cycleId) return false;
   return true;
 }
 
@@ -148,6 +182,7 @@ export const list = zQuery({
     priority: prioritySchema.optional(),
     assigneeId: userIdSchema.optional(),
     labelId: labelIdSchema.optional(),
+    cycleId: cycleIdSchema.optional(),
     search: z.string().trim().max(200).optional(),
     unassigned: z.boolean().optional(),
   },
@@ -165,6 +200,12 @@ export const list = zQuery({
           return projectId ? searched.eq("projectId", projectId) : searched;
         })
         .take(100);
+    } else if (args.cycleId) {
+      const cycleId = args.cycleId;
+      issues = await ctx.db
+        .query("issues")
+        .withIndex("by_cycle", (q) => q.eq("cycleId", cycleId))
+        .take(500);
     } else if (args.projectId && args.status) {
       const projectId = args.projectId;
       const status = args.status;
@@ -243,6 +284,7 @@ export const create = zMutation({
     assigneeId: userIdSchema.nullable().optional(),
     labelIds: labelIdsSchema.optional(),
     dueDate: z.number().finite().nullable().optional(),
+    cycleId: cycleIdSchema.nullable().optional(),
   },
   handler: async (ctx, args) => {
     const { project, userId } = await requireProjectAccess(ctx, args.projectId);
@@ -250,6 +292,8 @@ export const create = zMutation({
     await assertAssignee(ctx, project.workspaceId, assigneeId);
     const labelIds = args.labelIds ?? [];
     await assertLabels(ctx, project.workspaceId, labelIds);
+    const cycleId = args.cycleId ?? undefined;
+    await assertAssignableCycle(ctx, project.workspaceId, cycleId);
     const number = project.issueCounter + 1;
     const now = Date.now();
     const description = args.description?.trim() ?? "";
@@ -269,6 +313,7 @@ export const create = zMutation({
       updatedAt: now,
       ...(assigneeId ? { assigneeId } : {}),
       ...(args.dueDate ? { dueDate: args.dueDate } : {}),
+      ...(cycleId ? { cycleId } : {}),
     });
     await ctx.db.patch("projects", project._id, {
       issueCounter: number,
@@ -288,6 +333,7 @@ export const update = zMutation({
     assigneeId: userIdSchema.nullable().optional(),
     labelIds: labelIdsSchema.optional(),
     dueDate: z.number().finite().nullable().optional(),
+    cycleId: cycleIdSchema.nullable().optional(),
     projectId: projectIdSchema.optional(),
     order: z.number().finite().optional(),
   },
@@ -309,6 +355,9 @@ export const update = zMutation({
     if (args.labelIds) {
       await assertLabels(ctx, workspaceId, args.labelIds);
     }
+    if (args.cycleId !== undefined && args.cycleId !== (issue.cycleId ?? null)) {
+      await assertAssignableCycle(ctx, workspaceId, args.cycleId);
+    }
     const title = args.title ?? issue.title;
     const description = args.description ?? issue.description;
     await ctx.db.patch("issues", issue._id, {
@@ -326,6 +375,7 @@ export const update = zMutation({
         ? { assigneeId: args.assigneeId ?? undefined }
         : {}),
       ...(args.dueDate !== undefined ? { dueDate: args.dueDate ?? undefined } : {}),
+      ...(args.cycleId !== undefined ? { cycleId: args.cycleId ?? undefined } : {}),
     });
     return issue._id;
   },
