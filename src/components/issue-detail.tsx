@@ -3,6 +3,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
+import IssueActivity from "@/components/issue-activity";
 import IssueContextMenu from "@/components/issue-context-menu";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
@@ -20,12 +21,21 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { dateInputToTimestamp, dateInputValue, errorMessage, formatDue, isOverdue } from "@/lib/format";
 import { issueBranchName } from "@/lib/github-branch";
+import {
+  activeMentionIds,
+  filterMembers,
+  findMentionQuery,
+  memberMentionLabel,
+  mentionToken,
+  segmentCommentMentions,
+  type MentionMember,
+} from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Copy, ExternalLink, Unlink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -40,6 +50,8 @@ const prUrlSchema = z
     "Paste a GitHub pull request URL",
   );
 
+type PendingMention = { userId: Id<"users">; token: string };
+
 export default function IssueDetail({ issueId }: { issueId: string }) {
   const id = issueId as Id<"issues">;
   const router = useRouter();
@@ -51,6 +63,10 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     workspace ? { workspaceId: workspace._id } : "skip",
   );
   const pullRequests = useQuery(api.github.listPullRequests, issue ? { issueId: id } : "skip");
+  const cycles = useQuery(
+    api.cycles.list,
+    workspace ? { workspaceId: workspace._id } : "skip",
+  );
   const update = useMutation(api.issues.update);
   const remove = useMutation(api.issues.remove);
   const createComment = useMutation(api.comments.create);
@@ -60,10 +76,12 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   const unlinkPullRequest = useMutation(api.github.unlinkPullRequest);
   const refreshPullRequest = useAction(api.github.refreshPullRequest);
   const [comment, setComment] = useState("");
+  const [pendingMentions, setPendingMentions] = useState<PendingMention[]>([]);
   const [editingComment, setEditingComment] = useState<Id<"comments"> | null>(null);
   const [editingText, setEditingText] = useState("");
   const [prUrl, setPrUrl] = useState("");
   const branchName = issue ? issueBranchName(issue.identifier, issue.title) : "";
+  const [editingMentions, setEditingMentions] = useState<PendingMention[]>([]);
 
   async function patch(args: Parameters<typeof update>[0]) {
     try {
@@ -81,8 +99,13 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
       return;
     }
     try {
-      await createComment({ issueId: id, content: parsed.data });
+      await createComment({
+        issueId: id,
+        content: parsed.data,
+        mentionIds: activeMentionIds(parsed.data, pendingMentions),
+      });
       setComment("");
+      setPendingMentions([]);
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -133,6 +156,8 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     return <div className="p-6 text-sm text-muted-foreground">Issue not found.</div>;
   }
 
+  const memberList = members ?? [];
+
   return (
     <IssueContextMenu issue={issue}>
     <div className="flex h-full min-h-0 flex-col">
@@ -160,6 +185,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
               <p className="text-muted-foreground">No description yet.</p>
             )}
           </div>
+          <IssueActivity issueId={id} />
           <section className="mt-10">
             <div className="mb-3 flex items-center gap-2">
               <h2 className="text-sm font-medium">Comments</h2>
@@ -183,6 +209,15 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                           onClick={() => {
                             setEditingComment(item._id);
                             setEditingText(item.content);
+                            setEditingMentions(
+                              item.mentionIds
+                                .map((mentionId) => {
+                                  const member = memberList.find((entry) => entry._id === mentionId);
+                                  if (!member) return null;
+                                  return { userId: mentionId, token: mentionToken(member) };
+                                })
+                                .filter((entry): entry is PendingMention => entry !== null),
+                            );
                           }}
                         >
                           Edit
@@ -203,25 +238,47 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                           event.preventDefault();
                           const parsed = commentSchema.safeParse(editingText);
                           if (!parsed.success) return;
-                          void updateComment({ commentId: item._id, content: parsed.data })
-                            .then(() => setEditingComment(null))
+                          void updateComment({
+                            commentId: item._id,
+                            content: parsed.data,
+                            mentionIds: activeMentionIds(parsed.data, editingMentions),
+                          })
+                            .then(() => {
+                              setEditingComment(null);
+                              setEditingMentions([]);
+                            })
                             .catch((error: unknown) => toast.error(errorMessage(error)));
                         }}
                       >
-                        <Textarea value={editingText} onChange={(event) => setEditingText(event.target.value)} />
+                        <MentionComposer
+                          value={editingText}
+                          members={memberList}
+                          pending={editingMentions}
+                          onChange={setEditingText}
+                          onPendingChange={setEditingMentions}
+                        />
                         <Button type="submit" size="sm">Save</Button>
                       </form>
                     ) : (
-                      <p className="mt-1 text-sm whitespace-pre-wrap">{item.content}</p>
+                      <p className="mt-1 text-sm whitespace-pre-wrap">
+                        <CommentBody
+                          content={item.content}
+                          mentionIds={item.mentionIds}
+                          members={memberList}
+                        />
+                      </p>
                     )}
                   </div>
                 </article>
               ))}
             </div>
             <form onSubmit={onComment} className="mt-4 space-y-2">
-              <Textarea
+              <MentionComposer
                 value={comment}
-                onChange={(event) => setComment(event.target.value)}
+                members={memberList}
+                pending={pendingMentions}
+                onChange={setComment}
+                onPendingChange={setPendingMentions}
                 placeholder="Leave a comment"
               />
               <Button type="submit" size="sm">Comment</Button>
@@ -308,6 +365,34 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
               )}
             />
           </Field>
+          <Field label="Cycle">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="sm" />}>
+                {issue.cycle ? `Cycle ${issue.cycle.number}` : "No cycle"}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => void patch({ issueId: id, cycleId: null })}>
+                  No cycle
+                </DropdownMenuItem>
+                {cycles
+                  ?.filter(
+                    (cycle) =>
+                      cycle.status === "upcoming" ||
+                      cycle.status === "active" ||
+                      cycle._id === issue.cycleId,
+                  )
+                  .map((cycle) => (
+                    <DropdownMenuItem
+                      key={cycle._id}
+                      onClick={() => void patch({ issueId: id, cycleId: cycle._id })}
+                    >
+                      Cycle {cycle.number}
+                      {cycle.status === "completed" ? " (completed)" : ""}
+                    </DropdownMenuItem>
+                  ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Field>
           <Field label="Git branch">
             <div className="flex min-w-0 items-center gap-1">
               <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
@@ -387,6 +472,160 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
         {label}
       </div>
       {children}
+    </div>
+  );
+}
+
+function CommentBody({
+  content,
+  mentionIds,
+  members,
+}: {
+  content: string;
+  mentionIds: Id<"users">[];
+  members: MentionMember[];
+}) {
+  const segments = useMemo(
+    () => segmentCommentMentions(content, mentionIds, members),
+    [content, mentionIds, members],
+  );
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.type === "mention" ? (
+          <span
+            key={`${segment.userId}-${index}`}
+            className="rounded-sm bg-white/10 px-0.5 text-foreground"
+          >
+            {segment.value}
+          </span>
+        ) : (
+          <span key={`t-${index}`}>{segment.value}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function MentionComposer({
+  value,
+  members,
+  pending,
+  onChange,
+  onPendingChange,
+  placeholder,
+}: {
+  value: string;
+  members: MentionMember[];
+  pending: PendingMention[];
+  onChange: (value: string) => void;
+  onPendingChange: (pending: PendingMention[]) => void;
+  placeholder?: string;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [caret, setCaret] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [escaped, setEscaped] = useState(false);
+  const query = findMentionQuery(value, caret);
+  const options = useMemo(
+    () => (query ? filterMembers(members, query.query).slice(0, 8) : []),
+    [members, query],
+  );
+  const open = Boolean(query) && options.length > 0 && !escaped;
+
+  function selectMember(member: MentionMember) {
+    if (!query || !textareaRef.current) return;
+    const token = mentionToken(member);
+    const before = value.slice(0, query.start);
+    const after = value.slice(query.end);
+    const next = `${before}${token} ${after}`;
+    const nextCaret = before.length + token.length + 1;
+    onChange(next);
+    onPendingChange([
+      ...pending.filter((item) => item.userId !== member._id),
+      { userId: member._id, token },
+    ]);
+    setActiveIndex(0);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(nextCaret, nextCaret);
+      setCaret(nextCaret);
+    });
+  }
+
+  return (
+    <div className="relative">
+      <Textarea
+        ref={textareaRef}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setCaret(event.target.selectionStart);
+          setActiveIndex(0);
+          setEscaped(false);
+        }}
+        onClick={(event) => {
+          setCaret(event.currentTarget.selectionStart);
+          setEscaped(false);
+        }}
+        onKeyUp={(event) => setCaret(event.currentTarget.selectionStart)}
+        onKeyDown={(event) => {
+          if (!open) return;
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setActiveIndex((index) => (index + 1) % options.length);
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveIndex((index) => (index - 1 + options.length) % options.length);
+          } else if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            const member = options[activeIndex];
+            if (member) selectMember(member);
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            setEscaped(true);
+          }
+        }}
+      />
+      {open ? (
+        <ul
+          className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md"
+          role="listbox"
+        >
+          {options.map((member, index) => (
+            <li key={member._id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={index === activeIndex}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
+                  index === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
+                )}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectMember(member);
+                }}
+              >
+                <UserAvatar
+                  user={{
+                    name: member.name ?? null,
+                    email: member.email ?? null,
+                    image: member.image ?? null,
+                  }}
+                />
+                <span className="min-w-0 truncate">{memberMentionLabel(member)}</span>
+                {member.email ? (
+                  <span className="ml-auto truncate text-xs text-muted-foreground">{member.email}</span>
+                ) : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

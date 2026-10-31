@@ -10,6 +10,10 @@ import { Plus } from "lucide-react";
 export default function InboxScreen() {
   const { workspace, openCreate } = useWorkspace();
   const issues = useQuery(api.issues.inbox, workspace ? { workspaceId: workspace._id } : "skip");
+  const mentions = useQuery(
+    api.issues.mentions,
+    workspace ? { workspaceId: workspace._id } : "skip",
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -24,7 +28,15 @@ export default function InboxScreen() {
           <span className="sm:hidden">New</span>
         </Button>
       </header>
-      <IssueList issues={issues} empty="Nothing assigned to you. Inbox zero." />
+      <div className="min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]">
+        <IssueList issues={issues} empty="Nothing assigned to you. Inbox zero." nested />
+        <section className="border-t border-border">
+          <div className="flex min-h-10 items-center px-3 sm:px-4">
+            <h2 className="text-sm font-medium">Mentions</h2>
+          </div>
+          <IssueList issues={mentions} empty="No mentions yet." nested />
+        </section>
+      </div>
     </div>
   );
 }

@@ -39,6 +39,12 @@ const assigneeMode = v.union(
   v.literal("user"),
 );
 
+const cycleStatus = v.union(
+  v.literal("upcoming"),
+  v.literal("active"),
+  v.literal("completed"),
+);
+
 export default defineSchema({
   ...authTables,
   workspaces: defineTable({
@@ -75,6 +81,16 @@ export default defineSchema({
     color: v.string(),
     workspaceId: v.id("workspaces"),
   }).index("by_workspace", ["workspaceId"]),
+  cycles: defineTable({
+    workspaceId: v.id("workspaces"),
+    number: v.number(),
+    startsAt: v.number(),
+    endsAt: v.number(),
+    status: cycleStatus,
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_and_status", ["workspaceId", "status"]),
   issues: defineTable({
     title: v.string(),
     description: v.string(),
@@ -88,6 +104,7 @@ export default defineSchema({
     priority: priority,
     labelIds: v.array(v.id("labels")),
     dueDate: v.optional(v.number()),
+    cycleId: v.optional(v.id("cycles")),
     order: v.number(),
     number: v.number(),
     createdAt: v.number(),
@@ -100,6 +117,7 @@ export default defineSchema({
     .index("by_project_and_status", ["projectId", "status"])
     .index("by_workspace_and_status", ["workspaceId", "status"])
     .index("by_project_status_and_order", ["projectId", "status", "order"])
+    .index("by_cycle", ["cycleId"])
     .searchIndex("search_text", {
       searchField: "searchText",
       filterFields: ["workspaceId", "projectId"],
@@ -108,8 +126,44 @@ export default defineSchema({
     issueId: v.id("issues"),
     authorId: v.id("users"),
     content: v.string(),
+    // Missing on older rows — treat as [] when reading.
+    mentionIds: v.optional(v.array(v.id("users"))),
     createdAt: v.number(),
     updatedAt: v.number(),
+  }).index("by_issue", ["issueId"]),
+  mentions: defineTable({
+    workspaceId: v.id("workspaces"),
+    issueId: v.id("issues"),
+    commentId: v.id("comments"),
+    mentionedUserId: v.id("users"),
+    authorId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_mentioned_user", ["workspaceId", "mentionedUserId"])
+    .index("by_comment", ["commentId"]),
+  activities: defineTable({
+    issueId: v.id("issues"),
+    workspaceId: v.id("workspaces"),
+    actorId: v.id("users"),
+    createdAt: v.number(),
+    type: v.union(
+      v.literal("created"),
+      v.literal("title_changed"),
+      v.literal("description_changed"),
+      v.literal("status_changed"),
+      v.literal("priority_changed"),
+      v.literal("assignee_changed"),
+      v.literal("due_date_set"),
+      v.literal("due_date_changed"),
+      v.literal("due_date_cleared"),
+      v.literal("labels_added"),
+      v.literal("labels_removed"),
+      v.literal("comment_added"),
+      v.literal("comment_edited"),
+      v.literal("comment_deleted"),
+    ),
+    fromLabel: v.optional(v.string()),
+    toLabel: v.optional(v.string()),
   }).index("by_issue", ["issueId"]),
   views: defineTable({
     name: v.string(),

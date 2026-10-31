@@ -1,4 +1,4 @@
-import { format, startOfDay } from "date-fns";
+import { format, formatDistanceToNowStrict, startOfDay } from "date-fns";
 
 export function errorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -8,6 +8,14 @@ export function errorMessage(error: unknown) {
 }
 
 export function formatDue(timestamp: number) {
+  return format(timestamp, "MMM d");
+}
+
+export function formatRelative(timestamp: number) {
+  const ageMs = Date.now() - timestamp;
+  if (ageMs < 1000 * 60 * 60 * 24 * 7) {
+    return formatDistanceToNowStrict(timestamp, { addSuffix: true });
+  }
   return format(timestamp, "MMM d");
 }
 
