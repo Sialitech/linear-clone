@@ -3,6 +3,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
+import IssueActivity from "@/components/issue-activity";
 import IssueContextMenu from "@/components/issue-context-menu";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
@@ -48,6 +49,10 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   const comments = useQuery(api.comments.list, issue ? { issueId: id } : "skip");
   const members = useQuery(
     api.users.listMembers,
+    workspace ? { workspaceId: workspace._id } : "skip",
+  );
+  const cycles = useQuery(
+    api.cycles.list,
     workspace ? { workspaceId: workspace._id } : "skip",
   );
   const update = useMutation(api.issues.update);
@@ -135,6 +140,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
               <p className="text-muted-foreground">No description yet.</p>
             )}
           </div>
+          <IssueActivity issueId={id} />
           <section className="mt-10">
             <div className="mb-3 flex items-center gap-2">
               <h2 className="text-sm font-medium">Comments</h2>
@@ -313,6 +319,34 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                 issue.dueDate && isOverdue(issue.dueDate, issue.status) && "text-destructive",
               )}
             />
+          </Field>
+          <Field label="Cycle">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="sm" />}>
+                {issue.cycle ? `Cycle ${issue.cycle.number}` : "No cycle"}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => void patch({ issueId: id, cycleId: null })}>
+                  No cycle
+                </DropdownMenuItem>
+                {cycles
+                  ?.filter(
+                    (cycle) =>
+                      cycle.status === "upcoming" ||
+                      cycle.status === "active" ||
+                      cycle._id === issue.cycleId,
+                  )
+                  .map((cycle) => (
+                    <DropdownMenuItem
+                      key={cycle._id}
+                      onClick={() => void patch({ issueId: id, cycleId: cycle._id })}
+                    >
+                      Cycle {cycle.number}
+                      {cycle.status === "completed" ? " (completed)" : ""}
+                    </DropdownMenuItem>
+                  ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </Field>
           </div>
         </aside>

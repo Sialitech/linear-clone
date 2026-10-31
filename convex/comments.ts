@@ -2,6 +2,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { z } from "zod";
 import { loadPublicUser, requireIssueAccess, type ReadCtx } from "./lib/access";
+import { recordActivity } from "./lib/activity";
 import {
   commentIdSchema,
   issueIdSchema,
@@ -124,6 +125,12 @@ export const create = zMutation({
       mentionIds,
       createdAt: now,
     });
+    await recordActivity(ctx, {
+      issueId: args.issueId,
+      workspaceId: issue.workspaceId,
+      actorId: userId,
+      type: "comment_added",
+    });
     return commentId;
   },
 });
@@ -147,6 +154,13 @@ export const update = zMutation({
       args.mentionIds ?? [],
     );
     const now = Date.now();
+    const previousMentions = comment.mentionIds ?? [];
+    const mentionsUnchanged =
+      previousMentions.length === mentionIds.length &&
+      previousMentions.every((id, index) => id === mentionIds[index]);
+    if (args.content === comment.content && mentionsUnchanged) {
+      return comment._id;
+    }
     await ctx.db.patch("comments", comment._id, {
       content: args.content,
       mentionIds,
@@ -161,6 +175,14 @@ export const update = zMutation({
       mentionIds,
       createdAt: now,
     });
+    if (args.content !== comment.content) {
+      await recordActivity(ctx, {
+        issueId: comment.issueId,
+        workspaceId: issue.workspaceId,
+        actorId: userId,
+        type: "comment_edited",
+      });
+    }
     return comment._id;
   },
 });
@@ -170,13 +192,19 @@ export const remove = zMutation({
   handler: async (ctx, args) => {
     const comment = await ctx.db.get("comments", args.commentId);
     if (!comment) throw new Error("Comment not found");
-    const { userId, membership } = await requireIssueAccess(ctx, comment.issueId);
+    const { issue, userId, membership } = await requireIssueAccess(ctx, comment.issueId);
     const canModerate = membership.role === "owner" || membership.role === "admin";
     if (comment.authorId !== userId && !canModerate) {
       throw new Error("You can only delete your own comments");
     }
     await deleteMentionsForComment(ctx, comment._id);
     await ctx.db.delete("comments", comment._id);
+    await recordActivity(ctx, {
+      issueId: comment.issueId,
+      workspaceId: issue.workspaceId,
+      actorId: userId,
+      type: "comment_deleted",
+    });
     return comment._id;
   },
 });

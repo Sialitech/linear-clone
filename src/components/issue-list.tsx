@@ -22,11 +22,14 @@ const tableRow =
 export default function IssueList({
   issues,
   empty,
+  embedded = false,
   nested = false,
 }: {
   issues: IssueItem[] | undefined;
   empty: string;
-  /** When true, omit flex/overflow so a parent can scroll multiple lists. */
+  /** When true, omit sticky column headers and outer scroll so the list nests under a group header. */
+  embedded?: boolean;
+  /** When true, omit outer scroll so a parent can scroll multiple lists. */
   nested?: boolean;
 }) {
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
@@ -74,9 +77,12 @@ export default function IssueList({
     <div
       className={cn(
         "relative",
-        !nested && "min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]",
+        embedded || nested
+          ? embedded && "pb-[env(safe-area-inset-bottom)]"
+          : "min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]",
       )}
     >
+      {embedded ? null : (
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase md:hidden">
         <IssueCheckbox
           checked={allSelected}
@@ -86,6 +92,8 @@ export default function IssueList({
         />
         <span>Select</span>
       </div>
+      )}
+      {embedded ? null : (
       <div
         className={cn(
           tableRow,
@@ -108,6 +116,7 @@ export default function IssueList({
         <span className="hidden lg:block">Labels</span>
         <span>Due</span>
       </div>
+      )}
       {rows.map((issue) => {
         const isSelected = selected.has(issue._id);
         return (
