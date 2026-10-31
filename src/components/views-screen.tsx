@@ -2,100 +2,11 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ISSUE_STATUSES, type AssigneeMode, type IssueStatus } from "@convex/model";
 import IssueList from "@/components/issue-list";
-import { statusLabel } from "@/components/status-icon";
 import { useWorkspace } from "@/components/workspace-provider";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { errorMessage } from "@/lib/format";
-import { useMutation, useQuery } from "convex/react";
-import Link from "next/link";
-import { useState } from "react";
-import { toast } from "sonner";
-import { z } from "zod";
+import { useQuery } from "convex/react";
 
-const nameSchema = z.string().trim().min(1, "Enter a name").max(80);
-
-export default function ViewsScreen() {
-  const { workspace } = useWorkspace();
-  const views = useQuery(api.views.list, workspace ? { workspaceId: workspace._id } : "skip");
-  const create = useMutation(api.views.create);
-  const remove = useMutation(api.views.remove);
-  const [name, setName] = useState("");
-  const [status, setStatus] = useState<IssueStatus | "">("");
-  const [assigneeMode, setAssigneeMode] = useState<AssigneeMode>("anyone");
-
-  async function onCreate(event: React.FormEvent) {
-    event.preventDefault();
-    if (!workspace) return;
-    const parsed = nameSchema.safeParse(name);
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Enter a name");
-      return;
-    }
-    try {
-      await create({
-        workspaceId: workspace._id,
-        name: parsed.data,
-        assigneeMode,
-        ...(status ? { status } : {}),
-      });
-      setName("");
-    } catch (error) {
-      toast.error(errorMessage(error));
-    }
-  }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex min-h-12 items-center border-b border-border px-3 sm:px-4">
-        <h1 className="text-sm font-medium">Saved views</h1>
-      </header>
-      <form onSubmit={onCreate} className="flex flex-col gap-2 border-b border-border px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
-        <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="View name" className="h-9 w-full sm:h-7 sm:w-48" />
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value as IssueStatus | "")}
-          className="h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-7 sm:w-auto sm:text-xs"
-        >
-          <option value="">Any status</option>
-          {ISSUE_STATUSES.map((item) => (
-            <option key={item} value={item}>{statusLabel(item)}</option>
-          ))}
-        </select>
-        <select
-          value={assigneeMode}
-          onChange={(event) => setAssigneeMode(event.target.value as AssigneeMode)}
-          className="h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-7 sm:w-auto sm:text-xs"
-        >
-          <option value="anyone">Anyone</option>
-          <option value="me">Assigned to me</option>
-          <option value="unassigned">Unassigned</option>
-        </select>
-        <Button type="submit" size="sm" className="h-9 sm:h-7">Save view</Button>
-      </form>
-      <div className="min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]">
-        {views?.map((view) => (
-          <div key={view._id} className="flex items-center gap-3 border-b border-border px-3 py-3 text-sm sm:px-4 sm:py-2">
-            <Link href={`/views/${view._id}`} className="min-w-0 flex-1 truncate hover:underline">
-              {view.name}
-            </Link>
-            <button
-              type="button"
-              className="inline-flex min-h-11 items-center px-2 text-xs text-muted-foreground hover:text-foreground sm:min-h-0"
-              onClick={() => void remove({ viewId: view._id }).catch((error: unknown) => toast.error(errorMessage(error)))}
-            >
-              Delete
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function SavedViewScreen({ viewId }: { viewId: string }) {
+export default function SavedViewScreen({ viewId }: { viewId: string }) {
   const id = viewId as Id<"views">;
   const { workspace, me } = useWorkspace();
   const view = useQuery(api.views.get, { viewId: id });

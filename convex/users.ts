@@ -227,13 +227,6 @@ export const ensureWorkspace = zMutation({
       });
     }
     await ctx.db.insert("views", {
-      name: "My issues",
-      workspaceId,
-      ownerId: userId,
-      assigneeMode: "me",
-      createdAt: now,
-    });
-    await ctx.db.insert("views", {
       name: "All issues",
       workspaceId,
       ownerId: userId,
@@ -241,11 +234,10 @@ export const ensureWorkspace = zMutation({
       createdAt: now,
     });
     await ctx.db.insert("views", {
-      name: "High priority",
+      name: "My issues",
       workspaceId,
       ownerId: userId,
-      assigneeMode: "anyone",
-      priority: "high",
+      assigneeMode: "me",
       createdAt: now,
     });
     return workspaceId;

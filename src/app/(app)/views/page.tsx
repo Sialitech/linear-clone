@@ -1,5 +1,5 @@
-import ViewsScreen from "@/components/views-screen";
+import { redirect } from "next/navigation";
 
 export default function ViewsPage() {
-  return <ViewsScreen />;
+  redirect("/");
 }
