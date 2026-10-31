@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { loadPublicUser, requireIssueAccess } from "./lib/access";
+import { recordActivity } from "./lib/activity";
 import { commentIdSchema, issueIdSchema, zMutation, zQuery } from "./lib/functions";
 
 export const list = zQuery({
@@ -32,15 +33,22 @@ export const create = zMutation({
     content: z.string().trim().min(1).max(10000),
   },
   handler: async (ctx, args) => {
-    const { userId } = await requireIssueAccess(ctx, args.issueId);
+    const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
     const now = Date.now();
-    return await ctx.db.insert("comments", {
+    const commentId = await ctx.db.insert("comments", {
       issueId: args.issueId,
       authorId: userId,
       content: args.content,
       createdAt: now,
       updatedAt: now,
     });
+    await recordActivity(ctx, {
+      issueId: issue._id,
+      workspaceId: issue.workspaceId,
+      actorId: userId,
+      type: "comment_added",
+    });
+    return commentId;
   },
 });
 
@@ -52,13 +60,22 @@ export const update = zMutation({
   handler: async (ctx, args) => {
     const comment = await ctx.db.get("comments", args.commentId);
     if (!comment) throw new Error("Comment not found");
-    const { userId } = await requireIssueAccess(ctx, comment.issueId);
+    const { issue, userId } = await requireIssueAccess(ctx, comment.issueId);
     if (comment.authorId !== userId) {
       throw new Error("You can only edit your own comments");
+    }
+    if (args.content === comment.content) {
+      return comment._id;
     }
     await ctx.db.patch("comments", comment._id, {
       content: args.content,
       updatedAt: Date.now(),
+    });
+    await recordActivity(ctx, {
+      issueId: issue._id,
+      workspaceId: issue.workspaceId,
+      actorId: userId,
+      type: "comment_edited",
     });
     return comment._id;
   },
@@ -69,12 +86,18 @@ export const remove = zMutation({
   handler: async (ctx, args) => {
     const comment = await ctx.db.get("comments", args.commentId);
     if (!comment) throw new Error("Comment not found");
-    const { userId, membership } = await requireIssueAccess(ctx, comment.issueId);
+    const { issue, userId, membership } = await requireIssueAccess(ctx, comment.issueId);
     const canModerate = membership.role === "owner" || membership.role === "admin";
     if (comment.authorId !== userId && !canModerate) {
       throw new Error("You can only delete your own comments");
     }
     await ctx.db.delete("comments", comment._id);
+    await recordActivity(ctx, {
+      issueId: issue._id,
+      workspaceId: issue.workspaceId,
+      actorId: userId,
+      type: "comment_deleted",
+    });
     return comment._id;
   },
 });

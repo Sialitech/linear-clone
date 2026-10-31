@@ -9,6 +9,14 @@ import {
   type ReadCtx,
 } from "./lib/access";
 import {
+  dueDateActivityLabel,
+  labelNames,
+  priorityActivityLabel,
+  recordActivity,
+  statusActivityLabel,
+  userActivityLabel,
+} from "./lib/activity";
+import {
   issueIdSchema,
   issueStatusSchema,
   labelIdSchema,
@@ -274,6 +282,12 @@ export const create = zMutation({
       issueCounter: number,
       updatedAt: now,
     });
+    await recordActivity(ctx, {
+      issueId,
+      workspaceId: project.workspaceId,
+      actorId: userId,
+      type: "created",
+    });
     return issueId;
   },
 });
@@ -292,7 +306,7 @@ export const update = zMutation({
     order: z.number().finite().optional(),
   },
   handler: async (ctx, args) => {
-    const { issue } = await requireIssueAccess(ctx, args.issueId);
+    const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
     let projectId = issue.projectId;
     let workspaceId = issue.workspaceId;
     if (args.projectId && args.projectId !== issue.projectId) {
@@ -327,6 +341,99 @@ export const update = zMutation({
         : {}),
       ...(args.dueDate !== undefined ? { dueDate: args.dueDate ?? undefined } : {}),
     });
+
+    const activityBase = {
+      issueId: issue._id,
+      workspaceId,
+      actorId: userId,
+    };
+
+    if (args.title !== undefined && args.title !== issue.title) {
+      await recordActivity(ctx, { ...activityBase, type: "title_changed" });
+    }
+    if (args.description !== undefined && args.description !== issue.description) {
+      await recordActivity(ctx, { ...activityBase, type: "description_changed" });
+    }
+    if (args.status !== undefined && args.status !== issue.status) {
+      await recordActivity(ctx, {
+        ...activityBase,
+        type: "status_changed",
+        fromLabel: statusActivityLabel(issue.status),
+        toLabel: statusActivityLabel(args.status),
+      });
+    }
+    if (args.priority !== undefined && args.priority !== issue.priority) {
+      await recordActivity(ctx, {
+        ...activityBase,
+        type: "priority_changed",
+        fromLabel: priorityActivityLabel(issue.priority),
+        toLabel: priorityActivityLabel(args.priority),
+      });
+    }
+    if (args.assigneeId !== undefined) {
+      const nextAssigneeId = args.assigneeId ?? undefined;
+      if (nextAssigneeId !== issue.assigneeId) {
+        await recordActivity(ctx, {
+          ...activityBase,
+          type: "assignee_changed",
+          fromLabel: await userActivityLabel(ctx, issue.assigneeId),
+          toLabel: await userActivityLabel(ctx, nextAssigneeId),
+        });
+      }
+    }
+    if (args.dueDate !== undefined) {
+      const nextDue = args.dueDate ?? undefined;
+      const prevDue = issue.dueDate;
+      if (nextDue !== prevDue) {
+        if (prevDue === undefined && nextDue !== undefined) {
+          await recordActivity(ctx, {
+            ...activityBase,
+            type: "due_date_set",
+            toLabel: dueDateActivityLabel(nextDue),
+          });
+        } else if (prevDue !== undefined && nextDue === undefined) {
+          await recordActivity(ctx, {
+            ...activityBase,
+            type: "due_date_cleared",
+            fromLabel: dueDateActivityLabel(prevDue),
+          });
+        } else if (prevDue !== undefined && nextDue !== undefined) {
+          await recordActivity(ctx, {
+            ...activityBase,
+            type: "due_date_changed",
+            fromLabel: dueDateActivityLabel(prevDue),
+            toLabel: dueDateActivityLabel(nextDue),
+          });
+        }
+      }
+    }
+    if (args.labelIds !== undefined) {
+      const prev = new Set(issue.labelIds);
+      const next = new Set(args.labelIds);
+      const added = args.labelIds.filter((id) => !prev.has(id));
+      const removed = issue.labelIds.filter((id) => !next.has(id));
+      if (added.length > 0) {
+        const names = await labelNames(ctx, added);
+        if (names.length > 0) {
+          await recordActivity(ctx, {
+            ...activityBase,
+            type: "labels_added",
+            toLabel: names.join(", "),
+          });
+        }
+      }
+      if (removed.length > 0) {
+        const names = await labelNames(ctx, removed);
+        if (names.length > 0) {
+          await recordActivity(ctx, {
+            ...activityBase,
+            type: "labels_removed",
+            fromLabel: names.join(", "),
+          });
+        }
+      }
+    }
+
     return issue._id;
   },
 });
@@ -366,6 +473,16 @@ export const remove = zMutation({
         await ctx.db.delete("comments", comment._id);
       }
       if (comments.length < 50) break;
+    }
+    for (let pass = 0; pass < 10; pass += 1) {
+      const activities = await ctx.db
+        .query("activities")
+        .withIndex("by_issue", (q) => q.eq("issueId", issue._id))
+        .take(50);
+      for (const activity of activities) {
+        await ctx.db.delete("activities", activity._id);
+      }
+      if (activities.length < 50) break;
     }
     await ctx.db.delete("issues", issue._id);
     return issue._id;
