@@ -39,6 +39,10 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     api.users.listMembers,
     workspace ? { workspaceId: workspace._id } : "skip",
   );
+  const cycles = useQuery(
+    api.cycles.list,
+    workspace ? { workspaceId: workspace._id } : "skip",
+  );
   const update = useMutation(api.issues.update);
   const remove = useMutation(api.issues.remove);
   const createComment = useMutation(api.comments.create);
@@ -262,6 +266,34 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                 issue.dueDate && isOverdue(issue.dueDate, issue.status) && "text-destructive",
               )}
             />
+          </Field>
+          <Field label="Cycle">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="sm" />}>
+                {issue.cycle ? `Cycle ${issue.cycle.number}` : "No cycle"}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => void patch({ issueId: id, cycleId: null })}>
+                  No cycle
+                </DropdownMenuItem>
+                {cycles
+                  ?.filter(
+                    (cycle) =>
+                      cycle.status === "upcoming" ||
+                      cycle.status === "active" ||
+                      cycle._id === issue.cycleId,
+                  )
+                  .map((cycle) => (
+                    <DropdownMenuItem
+                      key={cycle._id}
+                      onClick={() => void patch({ issueId: id, cycleId: cycle._id })}
+                    >
+                      Cycle {cycle.number}
+                      {cycle.status === "completed" ? " (completed)" : ""}
+                    </DropdownMenuItem>
+                  ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </Field>
           </div>
         </aside>

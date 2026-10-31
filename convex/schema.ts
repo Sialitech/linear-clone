@@ -39,6 +39,12 @@ const assigneeMode = v.union(
   v.literal("user"),
 );
 
+const cycleStatus = v.union(
+  v.literal("upcoming"),
+  v.literal("active"),
+  v.literal("completed"),
+);
+
 export default defineSchema({
   ...authTables,
   workspaces: defineTable({
@@ -75,6 +81,16 @@ export default defineSchema({
     color: v.string(),
     workspaceId: v.id("workspaces"),
   }).index("by_workspace", ["workspaceId"]),
+  cycles: defineTable({
+    workspaceId: v.id("workspaces"),
+    number: v.number(),
+    startsAt: v.number(),
+    endsAt: v.number(),
+    status: cycleStatus,
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_and_status", ["workspaceId", "status"]),
   issues: defineTable({
     title: v.string(),
     description: v.string(),
@@ -88,6 +104,7 @@ export default defineSchema({
     priority: priority,
     labelIds: v.array(v.id("labels")),
     dueDate: v.optional(v.number()),
+    cycleId: v.optional(v.id("cycles")),
     order: v.number(),
     number: v.number(),
     createdAt: v.number(),
@@ -100,6 +117,7 @@ export default defineSchema({
     .index("by_project_and_status", ["projectId", "status"])
     .index("by_workspace_and_status", ["workspaceId", "status"])
     .index("by_project_status_and_order", ["projectId", "status", "order"])
+    .index("by_cycle", ["cycleId"])
     .searchIndex("search_text", {
       searchField: "searchText",
       filterFields: ["workspaceId", "projectId"],
