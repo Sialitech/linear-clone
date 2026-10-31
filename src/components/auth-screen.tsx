@@ -65,7 +65,7 @@ export default function AuthScreen({ mode }: { mode: "signIn" | "signUp" }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex min-h-dvh items-center justify-center px-4 py-8 pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-[380px]">
         <div className="mb-8 flex items-center gap-2">
           <span className="flex size-7 items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
@@ -117,14 +117,14 @@ export default function AuthScreen({ mode }: { mode: "signIn" | "signUp" }) {
               required
             />
           </div>
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button type="submit" className="h-10 w-full" disabled={pending}>
             {mode === "signIn" ? "Sign in" : "Create account"}
           </Button>
         </form>
         <Button
           type="button"
           variant="outline"
-          className="mt-2 w-full"
+          className="mt-2 h-10 w-full"
           disabled={pending}
           onClick={() => void onGoogle()}
         >

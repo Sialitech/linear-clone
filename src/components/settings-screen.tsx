@@ -66,8 +66,8 @@ export default function SettingsScreen() {
   const canManage = workspace?.role === "owner" || workspace?.role === "admin";
 
   return (
-    <div className="h-full overflow-auto">
-      <header className="flex h-12 items-center border-b border-border px-4">
+    <div className="h-full overflow-auto pb-[env(safe-area-inset-bottom)]">
+      <header className="flex min-h-12 items-center border-b border-border px-3 sm:px-4">
         <h1 className="text-sm font-medium">Settings</h1>
       </header>
       <div className="mx-auto max-w-xl space-y-10 px-4 py-6">
@@ -98,17 +98,17 @@ export default function SettingsScreen() {
             ))}
           </div>
           {canManage ? (
-            <form onSubmit={onMember} className="mt-3 flex flex-wrap items-center gap-2">
+            <form onSubmit={onMember} className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <Input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="email@company.com"
-                className="h-8 w-56"
+                className="h-9 w-full sm:h-8 sm:w-56"
               />
               <select
                 value={role}
                 onChange={(event) => setRole(event.target.value as "admin" | "member")}
-                className="h-8 rounded-md border border-border bg-transparent px-2 text-xs"
+                className="h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-8 sm:w-auto sm:text-xs"
               >
                 <option value="member">Member</option>
                 <option value="admin">Admin</option>

@@ -31,6 +31,7 @@ import {
   Plus,
   Settings,
   SquarePen,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -38,10 +39,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-export default function SidebarNav() {
+export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { workspace, workspaces, setWorkspaceId, me, openCreate } = useWorkspace();
+  const roomy = Boolean(onNavigate);
   const projects = useQuery(
     api.projects.list,
     workspace ? { workspaceId: workspace._id } : "skip",
@@ -57,9 +59,9 @@ export default function SidebarNav() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 flex-1 flex-col pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center gap-2 px-3 py-3">
-        <span className="flex size-6 items-center justify-center rounded-md bg-primary text-[11px] font-semibold text-primary-foreground">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-[11px] font-semibold text-primary-foreground">
           L
         </span>
         <DropdownMenu>
@@ -82,24 +84,37 @@ export default function SidebarNav() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        {onNavigate ? (
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-white/5 hover:text-foreground"
+            onClick={onNavigate}
+          >
+            <X className="size-4" />
+          </button>
+        ) : null}
       </div>
 
       <button
         type="button"
         onClick={() => openCreate(projects?.[0] ? { projectId: projects[0]._id } : undefined)}
-        className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground"
+        className={cn(
+          "mx-3 mb-2 flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+          roomy && "min-h-11",
+        )}
       >
         <SquarePen className="size-3.5" />
         New issue
-        <span className="ml-auto font-mono text-[10px]">⌘K</span>
+        <span className="ml-auto hidden font-mono text-[10px] lg:inline">⌘K</span>
       </button>
 
       <nav className="space-y-0.5 px-2">
-        <NavLink href="/" active={pathname === "/"}>
+        <NavLink href="/" active={pathname === "/"} onNavigate={onNavigate} roomy={roomy}>
           <Inbox className="size-3.5" />
           Inbox
         </NavLink>
-        <NavLink href="/projects" active={pathname === "/projects"}>
+        <NavLink href="/projects" active={pathname === "/projects"} onNavigate={onNavigate} roomy={roomy}>
           <Kanban className="size-3.5" />
           Projects
         </NavLink>
@@ -116,8 +131,10 @@ export default function SidebarNav() {
               <Link
                 key={project._id}
                 href={href}
+                onClick={onNavigate}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                  roomy && "min-h-11",
                   pathname.startsWith(href) && "bg-white/6 text-foreground",
                 )}
               >
@@ -135,7 +152,10 @@ export default function SidebarNav() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground"
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+              roomy && "min-h-11",
+            )}
           >
             <Plus className="size-3.5" />
             New project
@@ -152,8 +172,10 @@ export default function SidebarNav() {
               <Link
                 key={view._id}
                 href={href}
+                onClick={onNavigate}
                 className={cn(
                   "flex items-center rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                  roomy && "min-h-11",
                   pathname === href && "bg-white/6 text-foreground",
                 )}
               >
@@ -163,8 +185,10 @@ export default function SidebarNav() {
           })}
           <Link
             href="/views"
+            onClick={onNavigate}
             className={cn(
               "flex items-center rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+              roomy && "min-h-11",
               pathname === "/views" && "bg-white/6 text-foreground",
             )}
           >
@@ -179,7 +203,10 @@ export default function SidebarNav() {
             render={
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-white/5"
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-white/5",
+                  roomy && "min-h-11",
+                )}
               />
             }
           >
@@ -189,7 +216,12 @@ export default function SidebarNav() {
             </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-52">
-            <DropdownMenuItem onClick={() => router.push("/settings")}>
+            <DropdownMenuItem
+              onClick={() => {
+                onNavigate?.();
+                router.push("/settings");
+              }}
+            >
               <Settings className="size-3.5" />
               Settings
             </DropdownMenuItem>
@@ -215,16 +247,22 @@ function NavLink({
   href,
   active,
   children,
+  onNavigate,
+  roomy,
 }: {
   href: string;
   active: boolean;
   children: React.ReactNode;
+  onNavigate?: () => void;
+  roomy?: boolean;
 }) {
   return (
     <Link
       href={href}
+      onClick={onNavigate}
       className={cn(
         "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+        roomy && "min-h-11",
         active && "bg-white/6 text-foreground",
       )}
     >

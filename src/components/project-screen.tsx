@@ -89,50 +89,57 @@ export default function ProjectScreen({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-12 items-center gap-3 border-b border-border px-4">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-medium">{project?.name ?? "Project"}</h1>
+      <header className="flex min-h-12 items-center gap-2 border-b border-border px-3 py-2 sm:px-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-sm font-medium">
+            {project?.name ?? "Project"}
+            {project?.key ? (
+              <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">{project.key}</span>
+            ) : null}
+          </h1>
         </div>
-        <span className="font-mono text-xs text-muted-foreground">{project?.key}</span>
-        <div className="ml-auto flex items-center gap-1">
-          <Button type="button" size="sm" onClick={() => openCreate({ projectId: id })}>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button type="button" size="sm" className="h-9 sm:h-7" onClick={() => openCreate({ projectId: id })}>
             <Plus className="size-3.5" />
-            Issue
+            <span className="hidden sm:inline">Issue</span>
+            <span className="sm:hidden">New</span>
           </Button>
           <Link
             href={`/projects/${projectId}`}
+            aria-label="List"
             className={cn(
-              "inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-white/5",
+              "inline-flex h-9 items-center gap-1 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-white/5 sm:h-7",
               mode === "list" && "bg-white/8 text-foreground",
             )}
           >
             <List className="size-3.5" />
-            List
+            <span className="hidden sm:inline">List</span>
           </Link>
           <Link
             href={`/projects/${projectId}/board`}
+            aria-label="Board"
             className={cn(
-              "inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-white/5",
+              "inline-flex h-9 items-center gap-1 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-white/5 sm:h-7",
               mode === "board" && "bg-white/8 text-foreground",
             )}
           >
             <LayoutGrid className="size-3.5" />
-            Board
+            <span className="hidden sm:inline">Board</span>
           </Link>
         </div>
       </header>
       {mode === "list" ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+        <div className="flex flex-col gap-2 border-b border-border px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search issues"
-            className="h-7 w-48"
+            className="h-9 w-full sm:h-7 sm:w-48"
           />
           <select
             value={status}
             onChange={(event) => setStatus(event.target.value as IssueStatus | "")}
-            className="h-7 rounded-md border border-border bg-transparent px-2 text-xs"
+            className="h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-7 sm:w-auto sm:text-xs"
           >
             <option value="">Any status</option>
             {ISSUE_STATUSES.map((item) => (
@@ -144,7 +151,7 @@ export default function ProjectScreen({
           <select
             value={priority}
             onChange={(event) => setPriority(event.target.value as Priority | "")}
-            className="h-7 rounded-md border border-border bg-transparent px-2 text-xs"
+            className="h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-7 sm:w-auto sm:text-xs"
           >
             <option value="">Any priority</option>
             {PRIORITIES.map((item) => (
@@ -156,13 +163,13 @@ export default function ProjectScreen({
           <select
             value={assignee}
             onChange={(event) => setAssignee(event.target.value as "anyone" | "me" | "unassigned")}
-            className="h-7 rounded-md border border-border bg-transparent px-2 text-xs"
+            className="h-9 w-full rounded-md border border-border bg-transparent px-2 text-base sm:h-7 sm:w-auto sm:text-xs"
           >
             <option value="anyone">Anyone</option>
             <option value="me">Assigned to me</option>
             <option value="unassigned">Unassigned</option>
           </select>
-          <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={() => void saveView()}>
+          <Button type="button" variant="ghost" size="sm" className="h-9 sm:h-7" disabled={saving} onClick={() => void saveView()}>
             Save view
           </Button>
           <span className="sr-only">

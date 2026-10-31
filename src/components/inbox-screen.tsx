@@ -13,12 +13,15 @@ export default function InboxScreen() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-12 items-center gap-3 border-b border-border px-4">
+      <header className="flex min-h-12 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-4">
         <h1 className="text-sm font-medium">Inbox</h1>
-        <span className="text-xs text-muted-foreground">Assigned to you, still open</span>
-        <Button type="button" size="sm" className="ml-auto" onClick={() => openCreate()}>
+        <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+          Assigned to you, still open
+        </span>
+        <Button type="button" size="sm" className="ml-auto h-9 sm:h-7" onClick={() => openCreate()}>
           <Plus className="size-3.5" />
-          Issue
+          <span className="hidden sm:inline">Issue</span>
+          <span className="sm:hidden">New</span>
         </Button>
       </header>
       <IssueList issues={issues} empty="Nothing assigned to you. Inbox zero." />
