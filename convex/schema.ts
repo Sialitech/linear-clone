@@ -204,6 +204,26 @@ export default defineSchema({
     webhookSecret: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_workspace", ["workspaceId"]),
+  githubPlatformApp: defineTable({
+    singleton: v.literal("app"),
+    appId: v.number(),
+    slug: v.string(),
+    name: v.string(),
+    clientId: v.string(),
+    clientSecret: v.string(),
+    privateKey: v.string(),
+    webhookSecret: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_singleton", ["singleton"]),
+  githubInstallations: defineTable({
+    workspaceId: v.id("workspaces"),
+    installationId: v.number(),
+    accountLogin: v.string(),
+    accountType: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_installation", ["installationId"]),
   githubOAuthStates: defineTable({
     state: v.string(),
     workspaceId: v.id("workspaces"),

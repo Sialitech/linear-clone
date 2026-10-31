@@ -21,10 +21,7 @@ import {
   zQuery,
 } from "./lib/functions";
 import {
-  buildGithubManifest,
-  githubAppDisplayName,
-  githubAuthorizeUrl,
-  githubOAuthStartUrl,
+  githubInstallUrl,
   normalizeReturnOrigin,
   parseGithubTokenBody,
   parseGithubUser,
@@ -68,8 +65,43 @@ function githubClientSecret() {
   return value && value.length > 0 ? value : null;
 }
 
-function oauthConfigured() {
-  return Boolean(githubClientId() && githubClientSecret());
+function presentEnv(name: string) {
+  const value = process.env[name]?.trim();
+  return value && value.length > 0 ? value : null;
+}
+
+function githubAppPrivateKeyFromEnv() {
+  const value = presentEnv("GITHUB_APP_PRIVATE_KEY");
+  if (!value) return null;
+  return value.includes("\\n") ? value.replace(/\\n/g, "\n") : value;
+}
+
+async function loadPlatformApp(ctx: ReadCtx) {
+  const slug = presentEnv("GITHUB_APP_SLUG");
+  const appIdText = presentEnv("GITHUB_APP_ID");
+  const privateKey = githubAppPrivateKeyFromEnv();
+  const appId = appIdText && /^\d+$/.test(appIdText) ? Number(appIdText) : null;
+  if (slug && appId !== null && privateKey) {
+    return {
+      appId,
+      slug,
+      privateKey,
+      clientId: presentEnv("GITHUB_APP_CLIENT_ID") ?? githubClientId(),
+      clientSecret: presentEnv("GITHUB_APP_CLIENT_SECRET") ?? githubClientSecret(),
+    };
+  }
+  const row = await ctx.db
+    .query("githubPlatformApp")
+    .withIndex("by_singleton", (q) => q.eq("singleton", "app"))
+    .unique();
+  if (!row) return null;
+  return {
+    appId: row.appId,
+    slug: row.slug,
+    privateKey: row.privateKey,
+    clientId: row.clientId,
+    clientSecret: row.clientSecret,
+  };
 }
 
 function newOAuthState() {
@@ -167,14 +199,17 @@ export const oauthStatus = zQuery({
         q.eq("workspaceId", args.workspaceId).eq("userId", userId),
       )
       .unique();
-    const app = await ctx.db
-      .query("githubApps")
+    const installation = await ctx.db
+      .query("githubInstallations")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
-      .unique();
+      .first();
+    const platform = await loadPlatformApp(ctx);
+    const installed = Boolean(installation);
     return {
-      configured: oauthConfigured() || Boolean(app),
-      connected: Boolean(connection),
-      login: presentText(connection?.login),
+      configured: Boolean(platform?.slug),
+      installed,
+      connected: installed || Boolean(connection),
+      login: installation?.accountLogin ?? presentText(connection?.login),
       providerUserId: connection?.providerUserId ?? null,
     };
   },
@@ -271,32 +306,9 @@ export const beginOAuth = zMutation({
   },
   handler: async (ctx, args) => {
     const { userId } = await requireWorkspaceMember(ctx, args.workspaceId);
-    const redirectBase = convexSiteUrl();
-    if (!redirectBase) {
-      throw new Error("GitHub connect is unavailable right now");
-    }
-    const credentials = await loadOAuthCredentials(ctx, args.workspaceId);
-    if (!credentials) {
-      const workspace = await ctx.db.get(args.workspaceId);
-      const state = await insertOAuthState(ctx, {
-        workspaceId: args.workspaceId,
-        userId,
-        returnOrigin: args.returnOrigin,
-        kind: "manifest",
-      });
-      const homepage = normalizeReturnOrigin(args.returnOrigin);
-      if (!homepage) {
-        throw new Error("Open Settings in the app and try connecting again");
-      }
-      return {
-        kind: "manifest" as const,
-        action: `https://github.com/settings/apps/new?state=${encodeURIComponent(state)}`,
-        manifest: buildGithubManifest({
-          name: githubAppDisplayName(workspace?.name ?? "Issues", state),
-          homepage,
-          convexSite: redirectBase,
-        }),
-      };
+    const platform = await loadPlatformApp(ctx);
+    if (!platform?.slug) {
+      throw new Error("GitHub is not available yet");
     }
     const state = await insertOAuthState(ctx, {
       workspaceId: args.workspaceId,
@@ -305,25 +317,40 @@ export const beginOAuth = zMutation({
       kind: "connect",
     });
     return {
-      kind: "authorize" as const,
-      url: githubOAuthStartUrl(redirectBase, state),
+      kind: "install" as const,
+      url: githubInstallUrl(platform.slug, state),
     };
   },
 });
 
-export const disconnect = zMutation({
+export const disconnect = zAction({
   args: { workspaceId: workspaceIdSchema },
   handler: async (ctx, args) => {
-    const { userId } = await requireWorkspaceMember(ctx, args.workspaceId);
-    const connection = await ctx.db
-      .query("githubConnections")
-      .withIndex("by_workspace_and_user", (q) =>
-        q.eq("workspaceId", args.workspaceId).eq("userId", userId),
-      )
-      .unique();
-    if (connection) {
-      await ctx.db.delete("githubConnections", connection._id);
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
     }
+    const membership = await ctx.runQuery(internal.github.getMembershipInternal, {
+      workspaceId: args.workspaceId,
+      userId,
+    });
+    if (!membership) {
+      throw new Error("You do not have access to this workspace");
+    }
+    const canManage = membership.role === "owner" || membership.role === "admin";
+    if (canManage) {
+      await ctx.runAction(internal.githubNode.deleteInstallations, {
+        workspaceId: args.workspaceId,
+      });
+      await ctx.runMutation(internal.github.clearInstallationsInternal, {
+        workspaceId: args.workspaceId,
+      });
+      return null;
+    }
+    await ctx.runMutation(internal.github.clearUserConnectionInternal, {
+      workspaceId: args.workspaceId,
+      userId,
+    });
     return null;
   },
 });
@@ -396,6 +423,23 @@ export const refreshPullRequest = zAction({
     });
     if (!membership) {
       throw new Error("You do not have access to this workspace");
+    }
+    const installed = await ctx.runAction(internal.githubNode.fetchInstalledPullRequest, {
+      workspaceId: pullRequest.workspaceId,
+      owner: pullRequest.owner,
+      repo: pullRequest.repo,
+      number: pullRequest.number,
+    });
+    if (installed?.found) {
+      await ctx.runMutation(internal.github.patchPullRequestInternal, {
+        pullRequestId: pullRequest._id,
+        ...(installed.title !== undefined ? { title: installed.title } : {}),
+        state: installed.state,
+      });
+      return { refreshed: true as const };
+    }
+    if (installed && !installed.found) {
+      return { refreshed: false as const, reason: "github_error" as const };
     }
     const session = await ctx.runQuery(internal.github.getGithubSessionInternal, {
       workspaceId: pullRequest.workspaceId,
@@ -510,15 +554,55 @@ export const connectRedirectInternal = internalQuery({
     if (Date.now() - row.createdAt > OAUTH_STATE_TTL_MS) return null;
     const redirectBase = convexSiteUrl();
     if (!redirectBase || !row.returnOrigin) return null;
-    const credentials = await loadOAuthCredentials(ctx, row.workspaceId);
-    if (!credentials) return null;
+    const platform = await loadPlatformApp(ctx);
+    if (!platform?.slug) return null;
+    return { url: githubInstallUrl(platform.slug, row.state) };
+  },
+});
+
+export const platformRegisteredInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const platform = await loadPlatformApp(ctx);
+    return { registered: Boolean(platform) };
+  },
+});
+
+export const platformCredentialsInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const platform = await loadPlatformApp(ctx);
+    if (!platform) return null;
     return {
-      url: githubAuthorizeUrl({
-        clientId: credentials.clientId,
-        redirectUri: `${redirectBase}/github/oauth/callback`,
-        state: row.state,
-        mode: credentials.mode,
-      }),
+      appId: String(platform.appId),
+      privateKey: platform.privateKey,
+    };
+  },
+});
+
+export const installTargetsInternal = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    owner: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const platform = await loadPlatformApp(ctx);
+    if (!platform) return null;
+    const rows = await ctx.db
+      .query("githubInstallations")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(20);
+    if (rows.length === 0) return null;
+    const owner = args.owner.toLowerCase();
+    const sorted = [...rows].sort((left, right) => {
+      const leftMatch = owner.length > 0 && left.accountLogin.toLowerCase() === owner ? 0 : 1;
+      const rightMatch = owner.length > 0 && right.accountLogin.toLowerCase() === owner ? 0 : 1;
+      return leftMatch - rightMatch;
+    });
+    return {
+      appId: String(platform.appId),
+      privateKey: platform.privateKey,
+      installationIds: sorted.map((row) => row.installationId),
     };
   },
 });
@@ -570,6 +654,106 @@ export const createOAuthStateInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     return await insertOAuthState(ctx, args);
+  },
+});
+
+export const savePlatformAppInternal = internalMutation({
+  args: {
+    appId: v.number(),
+    slug: v.string(),
+    name: v.string(),
+    clientId: v.string(),
+    clientSecret: v.string(),
+    privateKey: v.string(),
+    webhookSecret: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("githubPlatformApp")
+      .withIndex("by_singleton", (q) => q.eq("singleton", "app"))
+      .unique();
+    if (existing) return null;
+    return await ctx.db.insert("githubPlatformApp", {
+      singleton: "app",
+      appId: args.appId,
+      slug: args.slug,
+      name: args.name,
+      clientId: args.clientId,
+      clientSecret: args.clientSecret,
+      privateKey: args.privateKey,
+      ...(args.webhookSecret ? { webhookSecret: args.webhookSecret } : {}),
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const saveInstallationInternal = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    installationId: v.number(),
+    accountLogin: v.string(),
+    accountType: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("githubInstallations")
+      .withIndex("by_installation", (q) => q.eq("installationId", args.installationId))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        workspaceId: args.workspaceId,
+        accountLogin: args.accountLogin,
+        accountType: args.accountType,
+      });
+      return existing._id;
+    }
+    return await ctx.db.insert("githubInstallations", {
+      workspaceId: args.workspaceId,
+      installationId: args.installationId,
+      accountLogin: args.accountLogin,
+      accountType: args.accountType,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const clearInstallationsInternal = internalMutation({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const installations = await ctx.db
+      .query("githubInstallations")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(50);
+    for (const row of installations) {
+      await ctx.db.delete("githubInstallations", row._id);
+    }
+    const connections = await ctx.db
+      .query("githubConnections")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(200);
+    for (const row of connections) {
+      await ctx.db.delete("githubConnections", row._id);
+    }
+    return null;
+  },
+});
+
+export const clearUserConnectionInternal = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const connection = await ctx.db
+      .query("githubConnections")
+      .withIndex("by_workspace_and_user", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("userId", args.userId),
+      )
+      .unique();
+    if (connection) {
+      await ctx.db.delete("githubConnections", connection._id);
+    }
+    return null;
   },
 });
 

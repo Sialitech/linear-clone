@@ -158,6 +158,69 @@ http.route({
 });
 
 http.route({
+  path: "/github/register/callback",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const code = new URL(request.url).searchParams.get("code");
+    if (!code) {
+      return new Response("Missing registration code.", { status: 400 });
+    }
+    const existing = await ctx.runQuery(internal.github.platformRegisteredInternal, {});
+    if (existing.registered) {
+      return new Response("GitHub app already registered.", { status: 200 });
+    }
+    try {
+      const created = await createGithubAppFromManifest(code);
+      const saved = await ctx.runMutation(internal.github.savePlatformAppInternal, {
+        appId: created.appId,
+        slug: created.slug,
+        name: created.name,
+        clientId: created.clientId,
+        clientSecret: created.clientSecret,
+        privateKey: created.privateKey,
+        ...(created.webhookSecret ? { webhookSecret: created.webhookSecret } : {}),
+      });
+      if (!saved) {
+        return new Response("GitHub app already registered.", { status: 200 });
+      }
+      return new Response("GitHub app registered.", { status: 200 });
+    } catch {
+      return new Response("GitHub app registration failed.", { status: 400 });
+    }
+  }),
+});
+
+http.route({
+  path: "/github/setup",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const state = url.searchParams.get("state");
+    const installationId = Number(url.searchParams.get("installation_id"));
+    if (!state || !Number.isInteger(installationId) || installationId <= 0) {
+      return redirectToSettings(null, "missing");
+    }
+    const pending = await ctx.runMutation(internal.github.consumeOAuthStateInternal, {
+      state,
+      kind: "connect",
+    });
+    if (!pending) {
+      return redirectToSettings(null, "expired");
+    }
+    const described = await ctx.runAction(internal.githubNode.describeInstallation, {
+      installationId,
+    });
+    await ctx.runMutation(internal.github.saveInstallationInternal, {
+      workspaceId: pending.workspaceId,
+      installationId,
+      accountLogin: described?.accountLogin ?? "GitHub",
+      accountType: described?.accountType ?? "User",
+    });
+    return redirectToSettings(pending.returnOrigin, "connected");
+  }),
+});
+
+http.route({
   path: "/github/webhook",
   method: "POST",
   handler: httpAction(async () => new Response(null, { status: 200 })),

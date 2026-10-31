@@ -60,6 +60,8 @@ export type GithubManifest = {
   description: string;
   public: boolean;
   request_oauth_on_install: boolean;
+  setup_url: string;
+  setup_on_update: boolean;
   default_permissions: {
     metadata: "read";
     pull_requests: "read";
@@ -79,11 +81,13 @@ export function buildGithubManifest(args: {
   return {
     name: args.name,
     url: args.homepage,
-    redirect_url: `${site}/github/manifest/callback`,
+    redirect_url: `${site}/github/register/callback`,
     callback_urls: [`${site}/github/oauth/callback`],
     description: "Reads pull request status for linked issues.",
-    public: false,
-    request_oauth_on_install: true,
+    public: true,
+    request_oauth_on_install: false,
+    setup_url: `${site}/github/setup`,
+    setup_on_update: true,
     default_permissions: {
       metadata: "read",
       pull_requests: "read",

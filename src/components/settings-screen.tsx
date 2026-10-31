@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/format";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -43,7 +43,7 @@ export default function SettingsScreen() {
   const setProjectRepo = useMutation(api.github.setProjectRepo);
   const clearProjectRepo = useMutation(api.github.clearProjectRepo);
   const beginOAuth = useMutation(api.github.beginOAuth);
-  const disconnectGithub = useMutation(api.github.disconnect);
+  const disconnectGithub = useAction(api.github.disconnect);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "member">("member");
@@ -167,20 +167,7 @@ export default function SettingsScreen() {
         workspaceId: workspace._id,
         returnOrigin: window.location.origin,
       });
-      if (result.kind === "authorize") {
-        window.location.assign(result.url);
-        return;
-      }
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = result.action;
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = "manifest";
-      input.value = JSON.stringify(result.manifest);
-      form.append(input);
-      document.body.append(form);
-      form.submit();
+      window.location.assign(result.url);
     } catch (error) {
       setConnectingGithub(false);
       toast.error(errorMessage(error));
@@ -256,7 +243,7 @@ export default function SettingsScreen() {
         <section>
           <h2 className="text-sm font-medium">GitHub</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Link a repository to each project, then connect GitHub to show live pull request titles and status.
+            Link a repository to each project, then install GitHub to show live pull request titles and status.
           </p>
           <div className="mt-3 space-y-3 rounded-md border border-border p-3">
             <div className="space-y-1.5">
@@ -307,13 +294,17 @@ export default function SettingsScreen() {
               ) : oauthStatus.connected ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-xs text-muted-foreground">
-                    Connected{oauthStatus.login ? ` as ${oauthStatus.login}` : ""}.
+                    {oauthStatus.installed
+                      ? `Installed${oauthStatus.login ? ` on ${oauthStatus.login}` : ""}.`
+                      : `Connected${oauthStatus.login ? ` as ${oauthStatus.login}` : ""}.`}
                   </p>
-                  <Button type="button" size="sm" variant="outline" onClick={() => void onDisconnectGithub()}>
-                    Disconnect
-                  </Button>
+                  {canManage || !oauthStatus.installed ? (
+                    <Button type="button" size="sm" variant="outline" onClick={() => void onDisconnectGithub()}>
+                      Disconnect
+                    </Button>
+                  ) : null}
                 </div>
-              ) : (
+              ) : oauthStatus.configured ? (
                 <div className="space-y-2">
                   <Button
                     type="button"
@@ -321,14 +312,14 @@ export default function SettingsScreen() {
                     disabled={connectingGithub}
                     onClick={() => void onConnectGithub()}
                   >
-                    {connectingGithub ? "Opening GitHub…" : "Connect GitHub"}
+                    {connectingGithub ? "Opening GitHub…" : "Install GitHub"}
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    {oauthStatus.configured
-                      ? "GitHub opens next so you can approve access."
-                      : "GitHub opens next. Confirm the app name, then choose the repositories it can read. No tokens to paste."}
+                    GitHub opens the install page. Choose the account and the repositories this workspace can read.
                   </p>
                 </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">GitHub install is not available yet.</p>
               )}
             </div>
           </div>

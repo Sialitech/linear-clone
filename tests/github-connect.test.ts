@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { createVerify, generateKeyPairSync } from "node:crypto";
 import { describe, it } from "node:test";
+import { signGithubAppJwt } from "../convex/lib/githubJwt.ts";
 import {
   buildGithubManifest,
   clearOAuthStateCookie,
@@ -42,11 +44,14 @@ describe("github connect helpers", () => {
       homepage: "https://app.example.com",
       convexSite: "https://happy-animal-123.convex.site/",
     });
-    assert.equal(manifest.redirect_url, "https://happy-animal-123.convex.site/github/manifest/callback");
+    assert.equal(manifest.redirect_url, "https://happy-animal-123.convex.site/github/register/callback");
+    assert.equal(manifest.setup_url, "https://happy-animal-123.convex.site/github/setup");
+    assert.equal(manifest.setup_on_update, true);
+    assert.equal(manifest.public, true);
     assert.deepEqual(manifest.callback_urls, ["https://happy-animal-123.convex.site/github/oauth/callback"]);
     assert.equal(manifest.default_permissions.pull_requests, "read");
     assert.equal(manifest.hook_attributes.active, false);
-    assert.equal(manifest.request_oauth_on_install, true);
+    assert.equal(manifest.request_oauth_on_install, false);
     const serialized = JSON.stringify(manifest);
     assert.equal(serialized.includes("client_secret"), false);
     assert.equal(serialized.includes("pem"), false);
@@ -115,6 +120,30 @@ describe("github connect helpers", () => {
     );
     assert.equal(settingsLocation("https://app.example.com/extra", "connected"), null);
     assert.equal(settingsLocation("https://app.example.com", "javascript"), "https://app.example.com/settings?github=error");
+  });
+
+  it("signs a GitHub app JWT with RS256", () => {
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const pem = privateKey.export({ type: "pkcs1", format: "pem" }).toString();
+    const pub = publicKey.export({ type: "pkcs1", format: "pem" }).toString();
+    const now = 1_700_000_000;
+    const jwt = signGithubAppJwt("12345", pem, now);
+    const [header, payload, signature] = jwt.split(".");
+    assert.ok(header && payload && signature);
+    const headerJson = JSON.parse(Buffer.from(header, "base64url").toString()) as { alg: string };
+    const payloadJson = JSON.parse(Buffer.from(payload, "base64url").toString()) as {
+      iss: string;
+      iat: number;
+      exp: number;
+    };
+    assert.equal(headerJson.alg, "RS256");
+    assert.equal(payloadJson.iss, "12345");
+    assert.equal(payloadJson.iat, now - 60);
+    assert.equal(payloadJson.exp, now + 9 * 60);
+    const valid = createVerify("RSA-SHA256")
+      .update(`${header}.${payload}`)
+      .verify(pub, Buffer.from(signature, "base64url"));
+    assert.equal(valid, true);
   });
 
   it("parses pull request urls", () => {
