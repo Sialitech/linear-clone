@@ -2,6 +2,14 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import {
+  ISSUE_STATUSES,
+  ISSUE_STATUS_LABELS,
+  PRIORITIES,
+  PRIORITY_LABELS,
+  type IssueStatus,
+  type Priority,
+} from "@convex/model";
 import { useWorkspace } from "@/components/workspace-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +68,7 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
   const prunedWorkspace = useRef<Id<"workspaces"> | null>(null);
   const { signOut } = useAuthActions();
   const [creating, setCreating] = useState(false);
+  const [creatingView, setCreatingView] = useState(false);
 
   useEffect(() => {
     if (!workspace || prunedWorkspace.current === workspace._id) return;
@@ -198,8 +207,21 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
         </div>
 
         <div>
-          <div className="px-2 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-            Views
+          <div className="flex items-center gap-1 px-2 pb-1">
+            <div className="min-w-0 flex-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+              Views
+            </div>
+            <button
+              type="button"
+              aria-label="New view"
+              onClick={() => setCreatingView(true)}
+              className={cn(
+                "inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                roomy ? "size-10" : "size-5",
+              )}
+            >
+              <Plus className={roomy ? "size-4" : "size-3.5"} />
+            </button>
           </div>
           {views?.map((view) => (
             <ViewRow
@@ -249,11 +271,20 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
         </DropdownMenu>
       </div>
       {workspace ? (
-        <CreateProjectDialog
-          open={creating}
-          workspaceId={workspace._id}
-          onOpenChange={setCreating}
-        />
+        <>
+          <CreateProjectDialog
+            open={creating}
+            workspaceId={workspace._id}
+            onOpenChange={setCreating}
+          />
+          <CreateViewDialog
+            open={creatingView}
+            workspaceId={workspace._id}
+            projects={projects}
+            onOpenChange={setCreatingView}
+            onNavigate={onNavigate}
+          />
+        </>
       ) : null}
     </div>
   );
@@ -505,3 +536,166 @@ function CreateProjectDialog({
 
 const zName = z.string().trim().min(1, "Enter a project name").max(80, "Name is too long");
 const viewNameSchema = z.string().trim().min(1, "Enter a view name").max(80, "Name is too long");
+
+function CreateViewDialog({
+  open,
+  onOpenChange,
+  workspaceId,
+  projects,
+  onNavigate,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspaceId: Id<"workspaces">;
+  projects: { _id: Id<"projects">; name: string }[] | undefined;
+  onNavigate?: () => void;
+}) {
+  const create = useMutation(api.views.create);
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [projectId, setProjectId] = useState<Id<"projects"> | "">("");
+  const [status, setStatus] = useState<IssueStatus | "">("");
+  const [priority, setPriority] = useState<Priority | "">("");
+  const [assignee, setAssignee] = useState<"anyone" | "me" | "unassigned">("anyone");
+  const [pending, setPending] = useState(false);
+
+  function reset() {
+    setName("");
+    setProjectId("");
+    setStatus("");
+    setPriority("");
+    setAssignee("anyone");
+  }
+
+  function close() {
+    reset();
+    onOpenChange(false);
+  }
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const parsed = viewNameSchema.safeParse(name);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Enter a view name");
+      return;
+    }
+    setPending(true);
+    try {
+      const viewId = await create({
+        workspaceId,
+        name: parsed.data,
+        assigneeMode: assignee,
+        ...(projectId ? { projectId } : {}),
+        ...(status ? { status } : {}),
+        ...(priority ? { priority } : {}),
+      });
+      reset();
+      onOpenChange(false);
+      onNavigate?.();
+      router.push(`/views/${viewId}`);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) close();
+        else onOpenChange(next);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>New view</DialogTitle>
+          <DialogDescription>Save a name and the filters this view should show.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="View name"
+            aria-label="View name"
+            autoFocus
+          />
+          <FilterField label="Project">
+            <select
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value as Id<"projects"> | "")}
+              className={selectClass}
+            >
+              <option value="">Any project</option>
+              {projects?.map((project) => (
+                <option key={project._id} value={project._id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Status">
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value as IssueStatus | "")}
+              className={selectClass}
+            >
+              <option value="">Any status</option>
+              {ISSUE_STATUSES.map((item) => (
+                <option key={item} value={item}>
+                  {ISSUE_STATUS_LABELS[item]}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Priority">
+            <select
+              value={priority}
+              onChange={(event) => setPriority(event.target.value as Priority | "")}
+              className={selectClass}
+            >
+              <option value="">Any priority</option>
+              {PRIORITIES.map((item) => (
+                <option key={item} value={item}>
+                  {PRIORITY_LABELS[item]}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Assignee">
+            <select
+              value={assignee}
+              onChange={(event) => setAssignee(event.target.value as "anyone" | "me" | "unassigned")}
+              className={selectClass}
+            >
+              <option value="anyone">Anyone</option>
+              <option value="me">Assigned to me</option>
+              <option value="unassigned">Unassigned</option>
+            </select>
+          </FilterField>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={close} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending}>
+              Create view
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const selectClass =
+  "h-9 w-full rounded-md border border-border bg-transparent px-2 text-sm text-foreground";
