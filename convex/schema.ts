@@ -125,4 +125,44 @@ export default defineSchema({
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_and_owner", ["workspaceId", "ownerId"]),
+  githubConnections: defineTable({
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    providerUserId: v.string(),
+    // Access token is server-side only; never return it from client queries.
+    accessToken: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_and_user", ["workspaceId", "userId"]),
+  githubOAuthStates: defineTable({
+    state: v.string(),
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_state", ["state"]),
+  projectRepos: defineTable({
+    workspaceId: v.id("workspaces"),
+    projectId: v.id("projects"),
+    owner: v.string(),
+    name: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_workspace", ["workspaceId"]),
+  pullRequests: defineTable({
+    workspaceId: v.id("workspaces"),
+    issueId: v.id("issues"),
+    owner: v.string(),
+    repo: v.string(),
+    number: v.number(),
+    url: v.string(),
+    title: v.optional(v.string()),
+    state: v.optional(
+      v.union(v.literal("open"), v.literal("closed"), v.literal("merged")),
+    ),
+    updatedAt: v.number(),
+  })
+    .index("by_issue", ["issueId"])
+    .index("by_workspace", ["workspaceId"]),
 });

@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as comments from "../comments.js";
+import type * as github from "../github.js";
 import type * as http from "../http.js";
 import type * as issues from "../issues.js";
 import type * as labels from "../labels.js";
@@ -30,6 +31,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   comments: typeof comments;
+  github: typeof github;
   http: typeof http;
   issues: typeof issues;
   labels: typeof labels;

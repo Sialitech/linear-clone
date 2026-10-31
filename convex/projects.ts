@@ -91,7 +91,21 @@ export const remove = zMutation({
       for (const comment of comments) {
         await ctx.db.delete("comments", comment._id);
       }
+      const pullRequests = await ctx.db
+        .query("pullRequests")
+        .withIndex("by_issue", (q) => q.eq("issueId", issue._id))
+        .take(50);
+      for (const pullRequest of pullRequests) {
+        await ctx.db.delete("pullRequests", pullRequest._id);
+      }
       await ctx.db.delete("issues", issue._id);
+    }
+    const repo = await ctx.db
+      .query("projectRepos")
+      .withIndex("by_project", (q) => q.eq("projectId", project._id))
+      .unique();
+    if (repo) {
+      await ctx.db.delete("projectRepos", repo._id);
     }
     await ctx.db.delete("projects", project._id);
     return project._id;
