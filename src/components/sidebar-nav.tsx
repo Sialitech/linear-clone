@@ -25,7 +25,6 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation, useQuery } from "convex/react";
 import {
   ChevronDown,
-  CircleUser,
   Inbox,
   Kanban,
   LogOut,
@@ -115,15 +114,6 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
         <NavLink href="/" active={pathname === "/"} onNavigate={onNavigate} roomy={roomy}>
           <Inbox className="size-3.5" />
           Inbox
-        </NavLink>
-        <NavLink
-          href="/my-issues"
-          active={pathname === "/my-issues"}
-          onNavigate={onNavigate}
-          roomy={roomy}
-        >
-          <CircleUser className="size-3.5" />
-          My Issues
         </NavLink>
         <NavLink href="/projects" active={pathname === "/projects"} onNavigate={onNavigate} roomy={roomy}>
           <Kanban className="size-3.5" />
