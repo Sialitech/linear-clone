@@ -1,3 +1,5 @@
+"use node";
+
 import { createSign } from "node:crypto";
 
 function base64url(value: string) {
