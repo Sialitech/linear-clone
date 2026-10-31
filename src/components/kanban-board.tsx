@@ -3,6 +3,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { ISSUE_STATUSES, type IssueStatus } from "@convex/model";
+import IssueContextMenu from "@/components/issue-context-menu";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
@@ -267,7 +268,9 @@ function SortableCard({
       {...attributes}
       {...listeners}
     >
-      <IssueCard issue={issue} onOpen={() => onOpen(issue._id)} />
+      <IssueContextMenu issue={issue}>
+        <IssueCard issue={issue} onOpen={() => onOpen(issue._id)} />
+      </IssueContextMenu>
     </div>
   );
 }
