@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSub,
@@ -228,7 +227,7 @@ export default function ViewControls({
                   Filter
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuLabel>Add filter</DropdownMenuLabel>
+                  <p className="px-1.5 py-1 text-xs font-medium text-muted-foreground">Add filter</p>
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
                       <StatusIcon status={display.status ?? "todo"} />
