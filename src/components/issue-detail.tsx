@@ -90,33 +90,33 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     }
   }
 
-  async function onCopyBranch() {
+  function onCopyBranch() {
     if (!issue) return;
     const branch = issueBranchName(issue.identifier, issue.title);
+    // Prefer a synchronous copy while still inside the click gesture.
+    // Awaiting clipboard.writeText first can lose the user-activation token.
+    const textarea = document.createElement("textarea");
+    textarea.value = branch;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    let copied = false;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(branch);
-      } else {
-        throw new Error("Clipboard API unavailable");
-      }
-      toast.success("Branch name copied");
+      copied = document.execCommand("copy");
     } catch {
-      try {
-        const textarea = document.createElement("textarea");
-        textarea.value = branch;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        const ok = document.execCommand("copy");
-        textarea.remove();
-        if (!ok) throw new Error("execCommand copy failed");
-        toast.success("Branch name copied");
-      } catch {
-        toast.error("Could not copy branch name");
-      }
+      copied = false;
     }
+    textarea.remove();
+    if (copied) {
+      toast.success("Branch name copied");
+      return;
+    }
+    void navigator.clipboard
+      ?.writeText(branch)
+      .then(() => toast.success("Branch name copied"))
+      .catch(() => toast.error("Could not copy branch name"));
   }
 
   async function onLinkPr(event: React.FormEvent) {
