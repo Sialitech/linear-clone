@@ -222,6 +222,32 @@ export const inbox = zQuery({
   },
 });
 
+export const mine = zQuery({
+  args: {
+    workspaceId: workspaceIdSchema,
+    mode: z.enum(["assigned", "created"]),
+  },
+  handler: async (ctx, args) => {
+    const { userId } = await requireWorkspaceMember(ctx, args.workspaceId);
+    let issues: Doc<"issues">[];
+    if (args.mode === "assigned") {
+      const assigned = await ctx.db
+        .query("issues")
+        .withIndex("by_assignee", (q) => q.eq("assigneeId", userId))
+        .take(200);
+      issues = assigned.filter((issue) => issue.workspaceId === args.workspaceId);
+    } else {
+      const inWorkspace = await ctx.db
+        .query("issues")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+        .take(300);
+      issues = inWorkspace.filter((issue) => issue.creatorId === userId);
+    }
+    const enriched = await enrichIssues(ctx, issues);
+    return enriched.sort((a, b) => b.updatedAt - a.updatedAt);
+  },
+});
+
 export const get = zQuery({
   args: { issueId: issueIdSchema },
   handler: async (ctx, args) => {
