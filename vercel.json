@@ -1,4 +1,4 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npx convex deploy --cmd 'npm run build' && if [ \"$VERCEL_ENV\" = preview ]; then npx convex env set SITE_URL \"https://${VERCEL_BRANCH_URL:-$VERCEL_URL}\"; fi"
+  "buildCommand": "npx convex deploy --cmd 'npm run build' && if [ \"$VERCEL_ENV\" = preview ]; then npx convex env set --preview-name \"${VERCEL_GIT_COMMIT_REF}\" SITE_URL \"https://${VERCEL_BRANCH_URL:-$VERCEL_URL}\"; fi"
 }
