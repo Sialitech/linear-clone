@@ -17,8 +17,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { dateInputToTimestamp, dateInputValue, errorMessage, formatDue, isOverdue } from "@/lib/format";
+import { issueBranchName } from "@/lib/github-branch";
 import {
   activeMentionIds,
   filterMembers,
@@ -29,7 +31,8 @@ import {
   type MentionMember,
 } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { Copy, ExternalLink, Unlink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
@@ -38,6 +41,14 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 const commentSchema = z.string().trim().min(1, "Write a comment").max(10000);
+const prUrlSchema = z
+  .string()
+  .trim()
+  .url("Paste a GitHub pull request URL")
+  .refine(
+    (value) => /^https:\/\/(www\.)?github\.com\/[^/]+\/[^/]+\/pull\/\d+\/?$/.test(value),
+    "Paste a GitHub pull request URL",
+  );
 
 type PendingMention = { userId: Id<"users">; token: string };
 
@@ -51,6 +62,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     api.users.listMembers,
     workspace ? { workspaceId: workspace._id } : "skip",
   );
+  const pullRequests = useQuery(api.github.listPullRequests, issue ? { issueId: id } : "skip");
   const cycles = useQuery(
     api.cycles.list,
     workspace ? { workspaceId: workspace._id } : "skip",
@@ -60,10 +72,15 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   const createComment = useMutation(api.comments.create);
   const updateComment = useMutation(api.comments.update);
   const removeComment = useMutation(api.comments.remove);
+  const linkPullRequest = useMutation(api.github.linkPullRequest);
+  const unlinkPullRequest = useMutation(api.github.unlinkPullRequest);
+  const refreshPullRequest = useAction(api.github.refreshPullRequest);
   const [comment, setComment] = useState("");
   const [pendingMentions, setPendingMentions] = useState<PendingMention[]>([]);
   const [editingComment, setEditingComment] = useState<Id<"comments"> | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [prUrl, setPrUrl] = useState("");
+  const branchName = issue ? issueBranchName(issue.identifier, issue.title) : "";
   const [editingMentions, setEditingMentions] = useState<PendingMention[]>([]);
 
   async function patch(args: Parameters<typeof update>[0]) {
@@ -99,6 +116,34 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     try {
       await remove({ issueId: id });
       router.push(issue ? `/projects/${issue.projectId}` : "/");
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  async function copyBranch() {
+    try {
+      await navigator.clipboard.writeText(branchName);
+      toast.success("Branch name copied");
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  async function onLinkPr(event: React.FormEvent) {
+    event.preventDefault();
+    const parsed = prUrlSchema.safeParse(prUrl);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Paste a GitHub pull request URL");
+      return;
+    }
+    try {
+      const pullRequestId = await linkPullRequest({ issueId: id, url: parsed.data });
+      setPrUrl("");
+      toast.success("Pull request linked");
+      void refreshPullRequest({ pullRequestId }).catch(() => {
+        // Optional enrichment when a GitHub token is present.
+      });
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -347,6 +392,70 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
                   ))}
               </DropdownMenuContent>
             </DropdownMenu>
+          </Field>
+          <Field label="Git branch">
+            <div className="flex min-w-0 items-center gap-1">
+              <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+                {branchName}
+              </code>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-9 shrink-0 px-2 sm:h-7"
+                onClick={() => void copyBranch()}
+                aria-label="Copy branch name"
+              >
+                <Copy className="size-3.5" />
+              </Button>
+            </div>
+          </Field>
+          <Field label="Pull requests">
+            <div className="space-y-2">
+              {pullRequests?.map((pr) => (
+                <div key={pr._id} className="flex min-w-0 items-center gap-1 text-xs">
+                  <a
+                    href={pr.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-w-0 flex-1 items-center gap-1 truncate text-foreground hover:underline"
+                  >
+                    <span className="truncate font-mono">{pr.label}</span>
+                    {pr.state ? (
+                      <span className="shrink-0 text-[10px] text-muted-foreground capitalize">
+                        {pr.state}
+                      </span>
+                    ) : null}
+                    <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
+                  </a>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 shrink-0 px-2 sm:h-7"
+                    aria-label={`Unlink ${pr.label}`}
+                    onClick={() =>
+                      void unlinkPullRequest({ pullRequestId: pr._id })
+                        .then(() => toast.success("Pull request unlinked"))
+                        .catch((error: unknown) => toast.error(errorMessage(error)))
+                    }
+                  >
+                    <Unlink className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+              <form onSubmit={onLinkPr} className="flex flex-col gap-1.5">
+                <Input
+                  value={prUrl}
+                  onChange={(event) => setPrUrl(event.target.value)}
+                  placeholder="https://github.com/org/repo/pull/1"
+                  className="h-9 text-xs sm:h-7"
+                />
+                <Button type="submit" size="sm" variant="outline" className="h-9 sm:h-7">
+                  Link PR
+                </Button>
+              </form>
+            </div>
           </Field>
           </div>
         </aside>

@@ -179,4 +179,81 @@ export default defineSchema({
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_and_owner", ["workspaceId", "ownerId"]),
+  githubConnections: defineTable({
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    providerUserId: v.string(),
+    login: v.optional(v.string()),
+    // Tokens are server-side only; never return them from client queries.
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    // 0 means the access token does not expire.
+    expiresAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_and_user", ["workspaceId", "userId"]),
+  githubApps: defineTable({
+    workspaceId: v.id("workspaces"),
+    appId: v.number(),
+    slug: v.string(),
+    name: v.string(),
+    clientId: v.string(),
+    clientSecret: v.string(),
+    privateKey: v.string(),
+    webhookSecret: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_workspace", ["workspaceId"]),
+  githubPlatformApp: defineTable({
+    singleton: v.literal("app"),
+    appId: v.number(),
+    slug: v.string(),
+    name: v.string(),
+    clientId: v.string(),
+    clientSecret: v.string(),
+    privateKey: v.string(),
+    webhookSecret: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_singleton", ["singleton"]),
+  githubInstallations: defineTable({
+    workspaceId: v.id("workspaces"),
+    installationId: v.number(),
+    accountLogin: v.string(),
+    accountType: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_installation", ["installationId"]),
+  githubOAuthStates: defineTable({
+    state: v.string(),
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    returnOrigin: v.optional(v.string()),
+    kind: v.optional(v.union(v.literal("manifest"), v.literal("connect"))),
+    createdAt: v.number(),
+  }).index("by_state", ["state"]),
+  projectRepos: defineTable({
+    workspaceId: v.id("workspaces"),
+    projectId: v.id("projects"),
+    owner: v.string(),
+    name: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_workspace", ["workspaceId"]),
+  pullRequests: defineTable({
+    workspaceId: v.id("workspaces"),
+    issueId: v.id("issues"),
+    owner: v.string(),
+    repo: v.string(),
+    number: v.number(),
+    url: v.string(),
+    title: v.optional(v.string()),
+    state: v.optional(
+      v.union(v.literal("open"), v.literal("closed"), v.literal("merged")),
+    ),
+    updatedAt: v.number(),
+  })
+    .index("by_issue", ["issueId"])
+    .index("by_workspace", ["workspaceId"]),
 });

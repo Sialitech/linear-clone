@@ -600,6 +600,16 @@ export const remove = zMutation({
       }
       if (comments.length < 50) break;
     }
+    for (let pass = 0; pass < 10; pass += 1) {
+      const pullRequests = await ctx.db
+        .query("pullRequests")
+        .withIndex("by_issue", (q) => q.eq("issueId", issue._id))
+        .take(50);
+      for (const pullRequest of pullRequests) {
+        await ctx.db.delete("pullRequests", pullRequest._id);
+      }
+      if (pullRequests.length < 50) break;
+    }
     await ctx.db.delete("issues", issue._id);
     return issue._id;
   },

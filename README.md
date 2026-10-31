@@ -40,6 +40,35 @@ In Google Cloud, the authorized redirect URI is:
 https://<your-deployment>.convex.site/api/auth/callback/google
 ```
 
+### GitHub
+
+Issue detail always shows a copyable branch name and lets members paste a PR URL. Workspace settings can link `owner/name` to a project without any GitHub token.
+
+**Install GitHub** in Settings opens GitHub’s install page for the product app. Choose the account and repositories. One installation covers the workspace, the same way Linear does. Owners and admins can disconnect it. People using the product do not create a GitHub App and do not paste tokens. Installation tokens stay in Convex and are not returned to the client.
+
+The product app is stored on the Convex deployment. These environment variables override that record when all three are set:
+
+- `GITHUB_APP_SLUG`
+- `GITHUB_APP_ID`
+- `GITHUB_APP_PRIVATE_KEY`
+
+Setup URL registered on that app:
+
+```text
+https://<your-deployment>.convex.site/github/setup
+```
+
+Registering the app is a one-time operator step. Approve a GitHub App manifest whose redirect URL is `https://<your-deployment>.convex.site/github/register/callback`. The first successful registration is kept.
+
+A personal OAuth connection remains a fallback for pull request refresh when these are set (Convex environment only — never `NEXT_PUBLIC_`):
+
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+
+```text
+https://<your-deployment>.convex.site/github/oauth/callback
+```
+
 ## Deploy on Vercel
 
 1. Create a project on [Vercel](https://vercel.com) and link this repository.

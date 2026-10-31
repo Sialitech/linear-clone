@@ -1,11 +1,12 @@
 import { NoOp } from "convex-helpers/server/customFunctions";
 import {
+  zCustomAction,
   zCustomMutation,
   zCustomQuery,
   zid,
 } from "convex-helpers/server/zod4";
 import { z } from "zod";
-import { mutation, query } from "../_generated/server";
+import { action, mutation, query } from "../_generated/server";
 import {
   ASSIGNEE_MODES,
   CYCLE_STATUSES,
@@ -17,6 +18,7 @@ import {
 
 export const zQuery = zCustomQuery(query, NoOp);
 export const zMutation = zCustomMutation(mutation, NoOp);
+export const zAction = zCustomAction(action, NoOp);
 
 export const issueStatusSchema = z.enum(ISSUE_STATUSES);
 export const prioritySchema = z.enum(PRIORITIES);
@@ -32,4 +34,6 @@ export const userIdSchema = zid("users");
 export const labelIdSchema = zid("labels");
 export const commentIdSchema = zid("comments");
 export const viewIdSchema = zid("views");
+export const pullRequestIdSchema = zid("pullRequests");
+export const projectRepoIdSchema = zid("projectRepos");
 export const cycleIdSchema = zid("cycles");
