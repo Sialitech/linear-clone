@@ -94,10 +94,28 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     if (!issue) return;
     const branch = issueBranchName(issue.identifier, issue.title);
     try {
-      await navigator.clipboard.writeText(branch);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(branch);
+      } else {
+        throw new Error("Clipboard API unavailable");
+      }
       toast.success("Branch name copied");
     } catch {
-      toast.error("Could not copy branch name");
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = branch;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand("copy");
+        textarea.remove();
+        if (!ok) throw new Error("execCommand copy failed");
+        toast.success("Branch name copied");
+      } catch {
+        toast.error("Could not copy branch name");
+      }
     }
   }
 
