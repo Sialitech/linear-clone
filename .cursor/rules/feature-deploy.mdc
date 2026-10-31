@@ -1,0 +1,34 @@
+---
+description: Cada feature va en una rama nueva y cada cambio se comprueba en el preview de Vercel y Convex
+alwaysApply: true
+---
+
+# Feature, rama y despliegue
+
+Cuando el usuario pida una feature o un cambio de código en este proyecto, sigue este flujo. Una pregunta que no modifica el repo no lo dispara.
+
+## Rama
+
+- El primer turno que cambia código crea una rama nueva desde `main` actualizado (`git fetch origin main`) y trabaja solo ahí.
+- Los turnos siguientes de la misma feature siguen en esa rama. No abras otra rama por cada mensaje.
+- Nombre: `cursor/<descripcion-corta>-cf42` si la sesión exige ese patrón; si no, `feature/<descripcion-corta>`.
+- Haz commit de cada cambio lógico y `git push -u origin HEAD`.
+- No despliegues a producción. El preview de la rama es el despliegue que hay que comprobar.
+
+## Qué cuenta como desplegado
+
+Vercel proyecto `linear-clone` (`prj_wQcJRdUHfgN3MfT7opmG0y8GagLi`), team `team_qcOWFSYH6sF7im5mNNXsNUrk`.
+
+El build de preview ejecuta `npx convex deploy` (`vercel.json`). Un deployment de Vercel en `READY` para el SHA empujado significa que Convex también se desplegó en el preview de esa rama. Un `ERROR` en Vercel deja Convex sin ese cambio.
+
+## Comprobar en cada turno con cambios
+
+Después de cada push de este flujo, antes de dar la feature por hecha:
+
+1. Con el MCP de Vercel, `list_deployments` con `projectId` `prj_wQcJRdUHfgN3MfT7opmG0y8GagLi`, `teamId` `team_qcOWFSYH6sF7im5mNNXsNUrk`, `branch` igual a la rama y `sha` igual a `git rev-parse HEAD`.
+2. Si no hay deployment o sigue en `QUEUED`, `BUILDING` o `INITIALIZING`, espera y vuelve a listar. No cierres el turno mientras siga en curso.
+3. `READY` es éxito. Di la URL del preview.
+4. `ERROR`, `CANCELED` o `BLOCKED` es fallo. Lee los logs de ese deployment, corrige, haz push y repite la comprobación.
+5. Con el MCP de Convex, `status` en la raíz del repo. Confirma que existe el deployment preview de esta rama. Si el MCP responde que no está autorizado, no inventes la URL de Convex: abre los logs de build de Vercel y comprueba que `npx convex deploy` terminó bien. Si Vercel está `READY` y Convex no lista ese preview, trátalo como fallo y no lo des por desplegado.
+
+En el resumen del turno incluye la rama, el SHA y el estado del deployment de ese SHA.
