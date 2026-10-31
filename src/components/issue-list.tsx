@@ -10,31 +10,50 @@ import { formatDue, isOverdue } from "@/lib/format";
 import { selectionAfterClick, selectionAfterSelectAll, type SelectionState } from "@/lib/issue-selection";
 import type { IssueItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Check } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 
 const emptySelection: SelectionState = { selected: [], anchorId: null };
 
 const tableRow =
   "hidden items-center gap-2 px-4 py-2 text-[13px] md:grid md:grid-cols-[1.75rem_4.75rem_minmax(0,1fr)_2.25rem_7.5rem_6.5rem_4.25rem] lg:grid-cols-[1.75rem_5.5rem_minmax(0,1fr)_2.25rem_8.25rem_6.75rem_9rem_4.25rem]";
 
+export type IssueListGroup = {
+  key: string;
+  label: string;
+  icon?: ReactNode;
+  issues: IssueItem[];
+};
+
 export default function IssueList({
   issues,
   empty,
   nested = false,
+  groups,
 }: {
   issues: IssueItem[] | undefined;
   empty: string;
   /** When true, omit outer scroll so a parent can scroll multiple lists. */
   nested?: boolean;
+  /** When set, issues render under these group headers instead of one flat list. */
+  groups?: IssueListGroup[];
 }) {
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
+  const [collapsed, setCollapsed] = useState<string[]>([]);
 
-  const rows = useMemo(
-    () => (issues === undefined ? [] : [...issues].sort((a, b) => b.updatedAt - a.updatedAt)),
-    [issues],
-  );
+  const sections = useMemo(() => {
+    if (groups) return groups.filter((group) => group.issues.length > 0);
+    if (!issues) return [];
+    return [
+      {
+        key: "all",
+        label: "",
+        issues: [...issues].sort((a, b) => b.updatedAt - a.updatedAt),
+      },
+    ];
+  }, [groups, issues]);
+  const rows = useMemo(() => sections.flatMap((section) => section.issues), [sections]);
   const orderedIds = useMemo(() => rows.map((issue) => issue._id), [rows]);
   const orderKey = orderedIds.join("|");
   const selected = new Set(selection.selected);
@@ -68,6 +87,12 @@ export default function IssueList({
 
   function selectAt(issueId: string, modifiers: { shiftKey: boolean; toggleKey: boolean }) {
     setSelection((current) => selectionAfterClick(orderedIds, current, issueId, modifiers));
+  }
+
+  function toggleGroup(key: string) {
+    setCollapsed((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
   }
 
   return (
@@ -108,108 +133,135 @@ export default function IssueList({
         <span className="hidden lg:block">Labels</span>
         <span>Due</span>
       </div>
-      {rows.map((issue) => {
-        const isSelected = selected.has(issue._id);
+      {sections.map((section) => {
+        const isCollapsed = collapsed.includes(section.key);
         return (
-          <IssueContextMenu key={issue._id} issue={issue} enableTouchMenu>
-            <div
-              className={cn(
-                "border-b border-border/70",
-                isSelected && "bg-primary/10",
-              )}
-            >
-              <div className="flex items-start gap-2 px-3 py-3 sm:px-4 md:hidden">
-                <IssueCheckbox
-                  checked={isSelected}
-                  label={isSelected ? `Deselect ${issue.identifier}` : `Select ${issue.identifier}`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    selectAt(issue._id, {
-                      shiftKey: event.shiftKey,
-                      toggleKey: event.metaKey || event.ctrlKey,
-                    });
-                  }}
-                />
-                <Link href={`/issues/${issue._id}`} className="min-w-0 flex-1">
-                  <div className="flex items-start gap-2">
-                    <StatusIcon status={issue.status} className="mt-0.5 size-3.5 shrink-0" />
-                    <span className="min-w-0 flex-1 text-[15px] leading-5 text-foreground">{issue.title}</span>
-                    <UserAvatar user={issue.assignee} />
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-5 text-xs text-muted-foreground">
-                    <span className="font-mono">{issue.identifier}</span>
-                    <span className="inline-flex items-center gap-1">
-                      <PriorityIcon priority={issue.priority} />
-                      {priorityLabel(issue.priority)}
-                    </span>
-                    <span>{statusLabel(issue.status)}</span>
-                    {issue.dueDate ? (
-                      <span className={cn(isOverdue(issue.dueDate, issue.status) && "text-destructive")}>
-                        {formatDue(issue.dueDate)}
-                      </span>
-                    ) : null}
-                    {issue.labels.slice(0, 2).map((label) => (
-                      <LabelChip key={label._id} name={label.name} color={label.color} />
-                    ))}
-                  </div>
-                </Link>
-              </div>
-              <Link
-                href={`/issues/${issue._id}`}
-                onClick={(event) => {
-                  if (event.shiftKey || event.metaKey || event.ctrlKey) {
-                    event.preventDefault();
-                    selectAt(issue._id, {
-                      shiftKey: event.shiftKey,
-                      toggleKey: event.metaKey || event.ctrlKey,
-                    });
-                  }
-                }}
-                className={cn(tableRow, "select-none hover:bg-white/[0.03]", isSelected && "hover:bg-primary/15")}
+          <div key={section.key}>
+            {section.label ? (
+              <button
+                type="button"
+                aria-expanded={!isCollapsed}
+                onClick={() => toggleGroup(section.key)}
+                className="flex w-full items-center gap-2 border-b border-border/70 bg-background px-3 py-2 text-left hover:bg-white/[0.03] sm:px-4"
               >
-                <span className="flex justify-center">
-                  <IssueCheckbox
-                    checked={isSelected}
-                    label={isSelected ? `Deselect ${issue.identifier}` : `Select ${issue.identifier}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      selectAt(issue._id, {
-                        shiftKey: event.shiftKey,
-                        toggleKey: event.metaKey || event.ctrlKey,
-                      });
-                    }}
-                  />
-                </span>
-                <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
-                <span className="truncate text-foreground">{issue.title}</span>
-                <span className="flex justify-center">
-                  <UserAvatar user={issue.assignee} />
-                </span>
-                <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
-                  <StatusIcon status={issue.status} />
-                  <span className="truncate">{statusLabel(issue.status)}</span>
-                </span>
-                <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
-                  <PriorityIcon priority={issue.priority} />
-                  <span className="truncate">{priorityLabel(issue.priority)}</span>
-                </span>
-                <span className="hidden min-w-0 items-center gap-1 lg:flex">
-                  {issue.labels.slice(0, 2).map((label) => (
-                    <LabelChip key={label._id} name={label.name} color={label.color} />
-                  ))}
-                </span>
-                <span
+                <ChevronRight
                   className={cn(
-                    "text-xs text-muted-foreground",
-                    issue.dueDate && isOverdue(issue.dueDate, issue.status) && "text-destructive",
+                    "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                    !isCollapsed && "rotate-90",
                   )}
-                >
-                  {issue.dueDate ? formatDue(issue.dueDate) : ""}
-                </span>
-              </Link>
-            </div>
-          </IssueContextMenu>
+                />
+                {section.icon}
+                <span className="truncate text-[13px] font-medium text-foreground">{section.label}</span>
+                <span className="text-xs text-muted-foreground">{section.issues.length}</span>
+              </button>
+            ) : null}
+            {isCollapsed
+              ? null
+              : section.issues.map((issue) => {
+                const isSelected = selected.has(issue._id);
+                return (
+                  <IssueContextMenu key={issue._id} issue={issue} enableTouchMenu>
+                    <div
+                      className={cn(
+                        "border-b border-border/70",
+                        isSelected && "bg-primary/10",
+                      )}
+                    >
+                      <div className="flex items-start gap-2 px-3 py-3 sm:px-4 md:hidden">
+                        <IssueCheckbox
+                          checked={isSelected}
+                          label={isSelected ? `Deselect ${issue.identifier}` : `Select ${issue.identifier}`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            selectAt(issue._id, {
+                              shiftKey: event.shiftKey,
+                              toggleKey: event.metaKey || event.ctrlKey,
+                            });
+                          }}
+                        />
+                        <Link href={`/issues/${issue._id}`} className="min-w-0 flex-1">
+                          <div className="flex items-start gap-2">
+                            <StatusIcon status={issue.status} className="mt-0.5 size-3.5 shrink-0" />
+                            <span className="min-w-0 flex-1 text-[15px] leading-5 text-foreground">{issue.title}</span>
+                            <UserAvatar user={issue.assignee} />
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-5 text-xs text-muted-foreground">
+                            <span className="font-mono">{issue.identifier}</span>
+                            <span className="inline-flex items-center gap-1">
+                              <PriorityIcon priority={issue.priority} />
+                              {priorityLabel(issue.priority)}
+                            </span>
+                            <span>{statusLabel(issue.status)}</span>
+                            {issue.dueDate ? (
+                              <span className={cn(isOverdue(issue.dueDate, issue.status) && "text-destructive")}>
+                                {formatDue(issue.dueDate)}
+                              </span>
+                            ) : null}
+                            {issue.labels.slice(0, 2).map((label) => (
+                              <LabelChip key={label._id} name={label.name} color={label.color} />
+                            ))}
+                          </div>
+                        </Link>
+                      </div>
+                      <Link
+                        href={`/issues/${issue._id}`}
+                        onClick={(event) => {
+                          if (event.shiftKey || event.metaKey || event.ctrlKey) {
+                            event.preventDefault();
+                            selectAt(issue._id, {
+                              shiftKey: event.shiftKey,
+                              toggleKey: event.metaKey || event.ctrlKey,
+                            });
+                          }
+                        }}
+                        className={cn(tableRow, "select-none hover:bg-white/[0.03]", isSelected && "hover:bg-primary/15")}
+                      >
+                        <span className="flex justify-center">
+                          <IssueCheckbox
+                            checked={isSelected}
+                            label={isSelected ? `Deselect ${issue.identifier}` : `Select ${issue.identifier}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              selectAt(issue._id, {
+                                shiftKey: event.shiftKey,
+                                toggleKey: event.metaKey || event.ctrlKey,
+                              });
+                            }}
+                          />
+                        </span>
+                        <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
+                        <span className="truncate text-foreground">{issue.title}</span>
+                        <span className="flex justify-center">
+                          <UserAvatar user={issue.assignee} />
+                        </span>
+                        <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                          <StatusIcon status={issue.status} />
+                          <span className="truncate">{statusLabel(issue.status)}</span>
+                        </span>
+                        <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                          <PriorityIcon priority={issue.priority} />
+                          <span className="truncate">{priorityLabel(issue.priority)}</span>
+                        </span>
+                        <span className="hidden min-w-0 items-center gap-1 lg:flex">
+                          {issue.labels.slice(0, 2).map((label) => (
+                            <LabelChip key={label._id} name={label.name} color={label.color} />
+                          ))}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-xs text-muted-foreground",
+                            issue.dueDate && isOverdue(issue.dueDate, issue.status) && "text-destructive",
+                          )}
+                        >
+                          {issue.dueDate ? formatDue(issue.dueDate) : ""}
+                        </span>
+                      </Link>
+                    </div>
+                  </IssueContextMenu>
+                );
+              })}
+          </div>
         );
       })}
       {selectedCount > 0 ? (

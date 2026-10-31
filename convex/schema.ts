@@ -39,6 +39,13 @@ const assigneeMode = v.union(
   v.literal("user"),
 );
 
+const viewGroup = v.union(
+  v.literal("status"),
+  v.literal("priority"),
+  v.literal("assignee"),
+  v.literal("project"),
+);
+
 const cycleStatus = v.union(
   v.literal("upcoming"),
   v.literal("active"),
@@ -175,6 +182,7 @@ export default defineSchema({
     assigneeMode: assigneeMode,
     assigneeId: v.optional(v.id("users")),
     labelId: v.optional(v.id("labels")),
+    groupBy: v.optional(viewGroup),
     createdAt: v.number(),
   })
     .index("by_workspace", ["workspaceId"])

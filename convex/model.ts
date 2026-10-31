@@ -30,6 +30,17 @@ export const ASSIGNEE_MODES = ["anyone", "me", "unassigned", "user"] as const;
 
 export type AssigneeMode = (typeof ASSIGNEE_MODES)[number];
 
+export const VIEW_GROUPS = ["status", "priority", "assignee", "project"] as const;
+
+export type ViewGroup = (typeof VIEW_GROUPS)[number];
+
+export const VIEW_GROUP_LABELS: Record<ViewGroup, string> = {
+  status: "Status",
+  priority: "Priority",
+  assignee: "Assignee",
+  project: "Project",
+};
+
 export const CYCLE_STATUSES = ["upcoming", "active", "completed"] as const;
 
 export type CycleStatus = (typeof CYCLE_STATUSES)[number];
