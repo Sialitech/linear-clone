@@ -20,8 +20,10 @@ import { toast } from "sonner";
 
 const STORAGE_KEY = "linear-clone:workspace";
 
+type IssueRelation = { kind: "child" | "parent"; issueId: Id<"issues"> };
+
 type ComposerState =
-  | { mode: "create"; projectId?: Id<"projects"> }
+  | { mode: "create"; projectId?: Id<"projects">; relation?: IssueRelation }
   | { mode: "edit"; issueId: Id<"issues"> };
 
 type WorkspaceContextValue = {
@@ -30,7 +32,7 @@ type WorkspaceContextValue = {
   setWorkspaceId: (workspaceId: Id<"workspaces">) => void;
   me: { _id: Id<"users">; name: string | null; email: string | null; image: string | null } | null | undefined;
   composer: ComposerState | null;
-  openCreate: (defaults?: { projectId?: Id<"projects"> }) => void;
+  openCreate: (defaults?: { projectId?: Id<"projects">; relation?: IssueRelation }) => void;
   openEdit: (issueId: Id<"issues">) => void;
   closeComposer: () => void;
 };
@@ -101,7 +103,12 @@ export default function WorkspaceProvider({ children }: { children: ReactNode })
         setWorkspaceIdState(next);
         window.localStorage.setItem(STORAGE_KEY, next);
       },
-      openCreate: (defaults) => setComposer({ mode: "create", projectId: defaults?.projectId }),
+      openCreate: (defaults) =>
+        setComposer({
+          mode: "create",
+          projectId: defaults?.projectId,
+          ...(defaults?.relation ? { relation: defaults.relation } : {}),
+        }),
       openEdit: (issueId) => setComposer({ mode: "edit", issueId }),
       closeComposer: () => setComposer(null),
     }),

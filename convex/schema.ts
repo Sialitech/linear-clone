@@ -122,10 +122,12 @@ export default defineSchema({
     cycleId: v.optional(v.id("cycles")),
     order: v.number(),
     number: v.number(),
+    parentId: v.optional(v.id("issues")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_project", ["projectId"])
+    .index("by_parent", ["parentId"])
     .index("by_assignee", ["assigneeId"])
     .index("by_status", ["status"])
     .index("by_workspace", ["workspaceId"])
@@ -176,6 +178,10 @@ export default defineSchema({
       v.literal("comment_added"),
       v.literal("comment_edited"),
       v.literal("comment_deleted"),
+      v.literal("parent_set"),
+      v.literal("parent_cleared"),
+      v.literal("sub_issue_added"),
+      v.literal("sub_issue_removed"),
     ),
     fromLabel: v.optional(v.string()),
     toLabel: v.optional(v.string()),
@@ -193,6 +199,7 @@ export default defineSchema({
     groupBy: v.optional(viewGroup),
     subGroupBy: v.optional(viewGroup),
     orderBy: v.optional(viewOrder),
+    showSubIssues: v.optional(v.boolean()),
     createdAt: v.number(),
   })
     .index("by_workspace", ["workspaceId"])

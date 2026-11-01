@@ -17,7 +17,11 @@ export type ActivityType =
   | "labels_removed"
   | "comment_added"
   | "comment_edited"
-  | "comment_deleted";
+  | "comment_deleted"
+  | "parent_set"
+  | "parent_cleared"
+  | "sub_issue_added"
+  | "sub_issue_removed";
 
 type RecordArgs = {
   issueId: Id<"issues">;

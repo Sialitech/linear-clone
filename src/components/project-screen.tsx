@@ -15,10 +15,11 @@ import StatusIcon, { statusLabel } from "@/components/status-icon";
 import { useWorkspace } from "@/components/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { errorMessage } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { LayoutGrid, List, Plus } from "lucide-react";
+import { GitBranch, LayoutGrid, List, Plus, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -41,6 +42,7 @@ export default function ProjectScreen({
   const [priority, setPriority] = useState<Priority | "">("");
   const [assignee, setAssignee] = useState<"anyone" | "me" | "unassigned">("anyone");
   const [saving, setSaving] = useState(false);
+  const [showSubIssues, setShowSubIssues] = useState(true);
   const createView = useMutation(api.views.create);
   const listArgs = workspace
     ? {
@@ -172,6 +174,28 @@ export default function ProjectScreen({
           <Button type="button" variant="ghost" size="sm" className="h-9 sm:h-7" disabled={saving} onClick={() => void saveView()}>
             Save view
           </Button>
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button type="button" variant="ghost" size="sm" className="h-9 sm:h-7" aria-label="Display options" />
+              }
+            >
+              <SlidersHorizontal className="size-3.5" />
+              Display
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 p-2">
+              <label className="flex h-8 items-center gap-2 px-2 text-[13px]">
+                <GitBranch className="size-3.5 text-muted-foreground" />
+                <span className="flex-1">Show sub-issues</span>
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-foreground"
+                  checked={showSubIssues}
+                  onChange={(event) => setShowSubIssues(event.target.checked)}
+                />
+              </label>
+            </PopoverContent>
+          </Popover>
           <span className="sr-only">
             <StatusIcon status="todo" />
             <PriorityIcon priority="none" />
@@ -181,7 +205,7 @@ export default function ProjectScreen({
       {mode === "board" && workspace ? (
         <KanbanBoard issues={issues} workspaceId={workspace._id} projectId={id} />
       ) : (
-        <IssueList issues={issues} empty="No issues match these filters." />
+        <IssueList issues={issues} empty="No issues match these filters." showSubIssues={showSubIssues} />
       )}
     </div>
   );

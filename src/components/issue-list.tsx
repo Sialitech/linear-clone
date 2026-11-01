@@ -1,18 +1,23 @@
 "use client";
 
+import { api } from "@convex/_generated/api";
 import IssueContextMenu from "@/components/issue-context-menu";
 import IssueSelectionBar from "@/components/issue-selection-bar";
 import LabelChip from "@/components/label-chip";
+import SubIssueProgress from "@/components/sub-issue-progress";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
-import { formatDue, isOverdue } from "@/lib/format";
+import { errorMessage, formatDue, isOverdue } from "@/lib/format";
 import { selectionAfterClick, selectionAfterSelectAll, type SelectionState } from "@/lib/issue-selection";
+import { nestIssues } from "@/lib/issue-tree";
 import type { IssueItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useMutation } from "convex/react";
 import { Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { toast } from "sonner";
 
 const emptySelection: SelectionState = { selected: [], anchorId: null };
 
@@ -33,6 +38,7 @@ export default function IssueList({
   nested = false,
   groups,
   preserveOrder = false,
+  showSubIssues = true,
 }: {
   issues: IssueItem[] | undefined;
   empty: string;
@@ -42,9 +48,13 @@ export default function IssueList({
   groups?: IssueListGroup[];
   /** Keep the incoming issue order instead of sorting by last update. */
   preserveOrder?: boolean;
+  /** Indent children under their parent. When false, children stay hidden if the parent is listed. */
+  showSubIssues?: boolean;
 }) {
+  const setParent = useMutation(api.issues.setParent);
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
   const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const sections = useMemo(() => {
     if (groups) return groups.filter((group) => group.issues.length > 0);
@@ -61,10 +71,10 @@ export default function IssueList({
     () =>
       sections.flatMap((section) =>
         section.groups && section.groups.length > 0
-          ? section.groups.flatMap((group) => group.issues)
-          : section.issues,
+          ? section.groups.flatMap((group) => nestIssues(group.issues, showSubIssues).map((row) => row.issue))
+          : nestIssues(section.issues, showSubIssues).map((row) => row.issue),
       ),
-    [sections],
+    [sections, showSubIssues],
   );
   const orderedIds = useMemo(() => rows.map((issue) => issue._id), [rows]);
   const orderKey = orderedIds.join("|");
@@ -99,6 +109,18 @@ export default function IssueList({
 
   function selectAt(issueId: string, modifiers: { shiftKey: boolean; toggleKey: boolean }) {
     setSelection((current) => selectionAfterClick(orderedIds, current, issueId, modifiers));
+  }
+
+  async function dropOn(parentId: string, event: DragEvent) {
+    event.preventDefault();
+    setDragOverId(null);
+    const issueId = event.dataTransfer.getData("text/plain");
+    if (!issueId || issueId === parentId) return;
+    try {
+      await setParent({ issueId: issueId as IssueItem["_id"], parentId: parentId as IssueItem["_id"] });
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
   }
 
   function toggleGroup(key: string) {
@@ -190,11 +212,19 @@ export default function IssueList({
                     </button>
                     {subgroupCollapsed
                       ? null
-                      : subgroup.issues.map((issue) => {
+                      : nestIssues(subgroup.issues, showSubIssues).map(({ issue, depth }) => {
                           const isSelected = selected.has(issue._id);
                           return (
                             <IssueContextMenu key={issue._id} issue={issue} enableTouchMenu>
-                              <IssueRows issue={issue} isSelected={isSelected} selectAt={selectAt} />
+                              <IssueRows
+                                issue={issue}
+                                depth={depth}
+                                isSelected={isSelected}
+                                dragOver={dragOverId === issue._id}
+                                selectAt={selectAt}
+                                onDragOverIssue={setDragOverId}
+                                onDropIssue={(event) => void dropOn(issue._id, event)}
+                              />
                             </IssueContextMenu>
                           );
                         })}
@@ -202,11 +232,19 @@ export default function IssueList({
                 );
               })
             ) : (
-              section.issues.map((issue) => {
+              nestIssues(section.issues, showSubIssues).map(({ issue, depth }) => {
                 const isSelected = selected.has(issue._id);
                 return (
                   <IssueContextMenu key={issue._id} issue={issue} enableTouchMenu>
-                    <IssueRows issue={issue} isSelected={isSelected} selectAt={selectAt} />
+                    <IssueRows
+                      issue={issue}
+                      depth={depth}
+                      isSelected={isSelected}
+                      dragOver={dragOverId === issue._id}
+                      selectAt={selectAt}
+                      onDragOverIssue={setDragOverId}
+                      onDropIssue={(event) => void dropOn(issue._id, event)}
+                    />
                   </IssueContextMenu>
                 );
               })
@@ -226,16 +264,49 @@ export default function IssueList({
 
 function IssueRows({
   issue,
+  depth,
   isSelected,
+  dragOver,
   selectAt,
+  onDragOverIssue,
+  onDropIssue,
 }: {
   issue: IssueItem;
+  depth: number;
   isSelected: boolean;
+  dragOver: boolean;
   selectAt: (issueId: string, modifiers: { shiftKey: boolean; toggleKey: boolean }) => void;
+  onDragOverIssue: (issueId: string | null) => void;
+  onDropIssue: (event: DragEvent) => void;
 }) {
+  const indent = depth * 20;
+
+  function onDragStart(event: DragEvent) {
+    event.dataTransfer.setData("text/plain", issue._id);
+    event.dataTransfer.effectAllowed = "move";
+  }
+
+  function onDragOver(event: DragEvent) {
+    if (!event.dataTransfer.types.includes("text/plain")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    onDragOverIssue(issue._id);
+  }
+
   return (
-    <div className={cn("border-b border-border/70", isSelected && "bg-primary/10")}>
-      <div className="flex items-start gap-2 px-3 py-3 sm:px-4 md:hidden">
+    <div
+      className={cn(
+        "border-b border-border/70",
+        isSelected && "bg-primary/10",
+        dragOver && "bg-primary/15",
+      )}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={() => onDragOverIssue(null)}
+      onDrop={onDropIssue}
+    >
+      <div className="flex items-start gap-2 px-3 py-3 sm:px-4 md:hidden" style={{ paddingLeft: 12 + indent }}>
         <IssueCheckbox
           checked={isSelected}
           label={isSelected ? `Deselect ${issue.identifier}` : `Select ${issue.identifier}`}
@@ -249,12 +320,14 @@ function IssueRows({
         />
         <Link href={`/issues/${issue._id}`} className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
+            {depth > 0 ? <TreeMark /> : null}
             <StatusIcon status={issue.status} className="mt-0.5 size-3.5 shrink-0" />
             <span className="min-w-0 flex-1 text-[15px] leading-5 text-foreground">{issue.title}</span>
             <UserAvatar user={issue.assignee} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-5 text-xs text-muted-foreground">
             <span className="font-mono">{issue.identifier}</span>
+            <SubIssueProgress done={issue.subIssues.done} total={issue.subIssues.total} />
             <span className="inline-flex items-center gap-1">
               <PriorityIcon priority={issue.priority} />
               {priorityLabel(issue.priority)}
@@ -283,6 +356,7 @@ function IssueRows({
           }
         }}
         className={cn(tableRow, "select-none hover:bg-white/[0.03]", isSelected && "hover:bg-primary/15")}
+        style={{ paddingLeft: 16 + indent }}
       >
         <span className="flex justify-center">
           <IssueCheckbox
@@ -299,7 +373,11 @@ function IssueRows({
           />
         </span>
         <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
-        <span className="truncate text-foreground">{issue.title}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          {depth > 0 ? <TreeMark /> : null}
+          <span className="truncate text-foreground">{issue.title}</span>
+          <SubIssueProgress done={issue.subIssues.done} total={issue.subIssues.total} />
+        </span>
         <span className="flex justify-center">
           <UserAvatar user={issue.assignee} />
         </span>
@@ -327,6 +405,10 @@ function IssueRows({
       </Link>
     </div>
   );
+}
+
+function TreeMark() {
+  return <span aria-hidden className="inline-block size-3 shrink-0 rounded-bl-sm border-b border-l border-muted-foreground/40" />;
 }
 
 function IssueCheckbox({

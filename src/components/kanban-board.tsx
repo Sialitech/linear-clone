@@ -6,6 +6,7 @@ import { ISSUE_STATUSES, type IssueStatus } from "@convex/model";
 import IssueContextMenu from "@/components/issue-context-menu";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon from "@/components/priority-icon";
+import SubIssueProgress from "@/components/sub-issue-progress";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
 import { errorMessage } from "@/lib/format";
@@ -299,6 +300,7 @@ function IssueCard({
       <div className="line-clamp-2 text-[13px] leading-5">{issue.title}</div>
       <div className="mt-2 flex items-center gap-1.5 text-muted-foreground">
         <span className="font-mono text-[11px]">{issue.identifier}</span>
+        <SubIssueProgress done={issue.subIssues.done} total={issue.subIssues.total} />
         <PriorityIcon priority={issue.priority} className="size-3" />
         <span className="ml-auto flex items-center gap-1">
           {issue.labels.slice(0, 1).map((label) => (

@@ -63,6 +63,50 @@ async function assertLabels(
   }
 }
 
+const MAX_PARENT_DEPTH = 6;
+
+async function issueIdentifier(ctx: ReadCtx, issue: Doc<"issues">) {
+  const project = await ctx.db.get("projects", issue.projectId);
+  return `${project?.key ?? "ISS"}-${issue.number}`;
+}
+
+async function assertParent(
+  ctx: ReadCtx,
+  workspaceId: Id<"workspaces">,
+  issueId: Id<"issues"> | null,
+  parentId: Id<"issues">,
+) {
+  if (issueId && parentId === issueId) {
+    throw new Error("An issue cannot be its own parent");
+  }
+  const parent = await ctx.db.get("issues", parentId);
+  if (!parent || parent.workspaceId !== workspaceId) {
+    throw new Error("Parent issue is not in this workspace");
+  }
+  let cursor: Doc<"issues"> = parent;
+  for (let depth = 0; depth < MAX_PARENT_DEPTH; depth += 1) {
+    if (issueId && cursor._id === issueId) {
+      throw new Error("That parent would create a cycle");
+    }
+    if (!cursor.parentId) return parent;
+    const next = await ctx.db.get("issues", cursor.parentId);
+    if (!next) return parent;
+    cursor = next;
+  }
+  throw new Error("Sub-issue nesting is too deep");
+}
+
+async function subIssueStats(ctx: ReadCtx, issueId: Id<"issues">) {
+  const children = await ctx.db
+    .query("issues")
+    .withIndex("by_parent", (q) => q.eq("parentId", issueId))
+    .take(100);
+  return {
+    total: children.length,
+    done: children.filter((child) => child.status === "done").length,
+  };
+}
+
 async function enrichIssues(ctx: QueryCtx, issues: Doc<"issues">[]) {
   const users = new Map<string, Awaited<ReturnType<typeof loadPublicUser>>>();
   const labels = new Map<string, { _id: Id<"labels">; name: string; color: string } | null>();
@@ -153,6 +197,20 @@ async function enrichIssues(ctx: QueryCtx, issues: Doc<"issues">[]) {
       assignee: await userOf(issue.assigneeId),
       creator: await userOf(issue.creatorId),
       labels: issueLabels,
+      parentId: issue.parentId ?? null,
+      parent: issue.parentId
+        ? await (async () => {
+            const parent = await ctx.db.get("issues", issue.parentId!);
+            if (!parent) return null;
+            const parentProject = await projectOf(parent.projectId);
+            return {
+              _id: parent._id,
+              title: parent.title,
+              identifier: `${parentProject?.key ?? "ISS"}-${parent.number}`,
+            };
+          })()
+        : null,
+      subIssues: await subIssueStats(ctx, issue._id),
     });
   }
   return enriched;
@@ -317,6 +375,21 @@ export const get = zQuery({
   },
 });
 
+export const children = zQuery({
+  args: { issueId: issueIdSchema },
+  handler: async (ctx, args) => {
+    const issue = await ctx.db.get("issues", args.issueId);
+    if (!issue) return [];
+    await requireWorkspaceMember(ctx, issue.workspaceId);
+    const kids = await ctx.db
+      .query("issues")
+      .withIndex("by_parent", (q) => q.eq("parentId", issue._id))
+      .take(100);
+    const enriched = await enrichIssues(ctx, kids);
+    return enriched.sort((a, b) => a.createdAt - b.createdAt);
+  },
+});
+
 export const create = zMutation({
   args: {
     projectId: projectIdSchema,
@@ -328,6 +401,7 @@ export const create = zMutation({
     labelIds: labelIdsSchema.optional(),
     dueDate: z.number().finite().nullable().optional(),
     cycleId: cycleIdSchema.nullable().optional(),
+    parentId: issueIdSchema.nullable().optional(),
   },
   handler: async (ctx, args) => {
     const { project, userId } = await requireProjectAccess(ctx, args.projectId);
@@ -337,6 +411,10 @@ export const create = zMutation({
     await assertLabels(ctx, project.workspaceId, labelIds);
     const cycleId = args.cycleId ?? undefined;
     await assertAssignableCycle(ctx, project.workspaceId, cycleId);
+    const parentId = args.parentId ?? undefined;
+    const parent = parentId
+      ? await assertParent(ctx, project.workspaceId, null, parentId)
+      : null;
     const number = project.issueCounter + 1;
     const now = Date.now();
     const description = args.description?.trim() ?? "";
@@ -357,6 +435,7 @@ export const create = zMutation({
       ...(assigneeId ? { assigneeId } : {}),
       ...(args.dueDate ? { dueDate: args.dueDate } : {}),
       ...(cycleId ? { cycleId } : {}),
+      ...(parentId ? { parentId } : {}),
     });
     await ctx.db.patch("projects", project._id, {
       issueCounter: number,
@@ -368,7 +447,83 @@ export const create = zMutation({
       actorId: userId,
       type: "created",
     });
+    if (parent) {
+      const child = await ctx.db.get("issues", issueId);
+      const childLabel = child ? await issueIdentifier(ctx, child) : args.title;
+      const parentLabel = await issueIdentifier(ctx, parent);
+      await recordActivity(ctx, {
+        issueId,
+        workspaceId: project.workspaceId,
+        actorId: userId,
+        type: "parent_set",
+        toLabel: parentLabel,
+      });
+      await recordActivity(ctx, {
+        issueId: parent._id,
+        workspaceId: project.workspaceId,
+        actorId: userId,
+        type: "sub_issue_added",
+        toLabel: childLabel,
+      });
+    }
     return issueId;
+  },
+});
+
+export const setParent = zMutation({
+  args: {
+    issueId: issueIdSchema,
+    parentId: issueIdSchema.nullable(),
+  },
+  handler: async (ctx, args) => {
+    const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
+    const nextParentId = args.parentId ?? undefined;
+    if (nextParentId === issue.parentId) return issue._id;
+    const nextParent = nextParentId
+      ? await assertParent(ctx, issue.workspaceId, issue._id, nextParentId)
+      : null;
+    const childLabel = await issueIdentifier(ctx, issue);
+    if (issue.parentId) {
+      const previous = await ctx.db.get("issues", issue.parentId);
+      const previousLabel = previous ? await issueIdentifier(ctx, previous) : undefined;
+      await recordActivity(ctx, {
+        issueId: issue._id,
+        workspaceId: issue.workspaceId,
+        actorId: userId,
+        type: "parent_cleared",
+        ...(previousLabel ? { fromLabel: previousLabel } : {}),
+      });
+      if (previous) {
+        await recordActivity(ctx, {
+          issueId: previous._id,
+          workspaceId: issue.workspaceId,
+          actorId: userId,
+          type: "sub_issue_removed",
+          fromLabel: childLabel,
+        });
+      }
+    }
+    if (nextParent) {
+      await recordActivity(ctx, {
+        issueId: issue._id,
+        workspaceId: issue.workspaceId,
+        actorId: userId,
+        type: "parent_set",
+        toLabel: await issueIdentifier(ctx, nextParent),
+      });
+      await recordActivity(ctx, {
+        issueId: nextParent._id,
+        workspaceId: issue.workspaceId,
+        actorId: userId,
+        type: "sub_issue_added",
+        toLabel: childLabel,
+      });
+    }
+    await ctx.db.patch("issues", issue._id, {
+      parentId: nextParentId,
+      updatedAt: Date.now(),
+    });
+    return issue._id;
   },
 });
 
@@ -579,7 +734,7 @@ export const move = zMutation({
 export const remove = zMutation({
   args: { issueId: issueIdSchema },
   handler: async (ctx, args) => {
-    const { issue } = await requireIssueAccess(ctx, args.issueId);
+    const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
     for (let pass = 0; pass < 10; pass += 1) {
       const comments = await ctx.db
         .query("comments")
@@ -609,6 +764,25 @@ export const remove = zMutation({
         await ctx.db.delete("pullRequests", pullRequest._id);
       }
       if (pullRequests.length < 50) break;
+    }
+    const childrenOf = await ctx.db
+      .query("issues")
+      .withIndex("by_parent", (q) => q.eq("parentId", issue._id))
+      .take(100);
+    for (const child of childrenOf) {
+      await ctx.db.patch("issues", child._id, { parentId: undefined, updatedAt: Date.now() });
+    }
+    if (issue.parentId) {
+      const parent = await ctx.db.get("issues", issue.parentId);
+      if (parent) {
+        await recordActivity(ctx, {
+          issueId: parent._id,
+          workspaceId: issue.workspaceId,
+          actorId: userId,
+          type: "sub_issue_removed",
+          fromLabel: await issueIdentifier(ctx, issue),
+        });
+      }
     }
     await ctx.db.delete("issues", issue._id);
     return issue._id;

@@ -20,7 +20,11 @@ type ActivityType =
   | "labels_removed"
   | "comment_added"
   | "comment_edited"
-  | "comment_deleted";
+  | "comment_deleted"
+  | "parent_set"
+  | "parent_cleared"
+  | "sub_issue_added"
+  | "sub_issue_removed";
 
 function activitySentence(activity: {
   type: ActivityType;
@@ -58,6 +62,18 @@ function activitySentence(activity: {
       return "edited a comment";
     case "comment_deleted":
       return "deleted a comment";
+    case "parent_set":
+      return activity.toLabel ? `set the parent to ${activity.toLabel}` : "set the parent";
+    case "parent_cleared":
+      return activity.fromLabel
+        ? `removed the parent ${activity.fromLabel}`
+        : "removed the parent";
+    case "sub_issue_added":
+      return activity.toLabel ? `added sub-issue ${activity.toLabel}` : "added a sub-issue";
+    case "sub_issue_removed":
+      return activity.fromLabel
+        ? `removed sub-issue ${activity.fromLabel}`
+        : "removed a sub-issue";
     default:
       return "updated the issue";
   }

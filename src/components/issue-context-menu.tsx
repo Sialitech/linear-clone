@@ -25,6 +25,7 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Box,
   Calendar,
+  GitBranch,
   CalendarX2,
   Check,
   ChevronRight,
@@ -39,7 +40,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
-type Submenu = "status" | "priority" | "assignee" | "due" | "labels" | "project";
+type Submenu = "status" | "priority" | "assignee" | "due" | "labels" | "project" | "related";
 
 type MenuState = {
   x: number;
@@ -59,7 +60,7 @@ export default function IssueContextMenu({
   enableTouchMenu?: boolean;
 }) {
   const router = useRouter();
-  const { openEdit, me } = useWorkspace();
+  const { openEdit, openCreate, me } = useWorkspace();
   const update = useMutation(api.issues.update);
   const remove = useMutation(api.issues.remove);
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -249,6 +250,14 @@ export default function IssueContextMenu({
     }
   }
 
+  function openRelated(kind: "child" | "parent") {
+    setMenu(null);
+    openCreate({
+      projectId: issue.projectId,
+      relation: { kind, issueId: issue._id },
+    });
+  }
+
   async function onDelete() {
     setMenu(null);
     if (!window.confirm(`Delete ${issue.identifier}?`)) return;
@@ -419,6 +428,19 @@ export default function IssueContextMenu({
                   onOpenNow={() => {
                     cancelHover();
                     showSubmenu("project");
+                  }}
+                />
+                <MenuSeparator />
+                <MenuRow
+                  icon={<GitBranch />}
+                  label="Create related"
+                  submenu="related"
+                  open={menu.submenu === "related"}
+                  onOpen={() => scheduleSubmenu("related")}
+                  onCancel={cancelHover}
+                  onOpenNow={() => {
+                    cancelHover();
+                    showSubmenu("related");
                   }}
                 />
                 <MenuSeparator />
@@ -623,6 +645,12 @@ export default function IssueContextMenu({
                         />
                       ))
                     )
+                  ) : null}
+                  {menu.submenu === "related" ? (
+                    <>
+                      <ChoiceRow label="Sub-issue…" onClick={() => openRelated("child")} />
+                      <ChoiceRow label="Parent issue…" onClick={() => openRelated("parent")} />
+                    </>
                   ) : null}
                 </div>
               ) : null}

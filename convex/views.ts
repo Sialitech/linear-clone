@@ -124,6 +124,7 @@ export const update = zMutation({
     groupBy: viewGroupSchema.nullable(),
     subGroupBy: viewGroupSchema.nullable(),
     orderBy: viewOrderSchema.nullable(),
+    showSubIssues: z.boolean(),
   },
   handler: async (ctx, args) => {
     const view = await ctx.db.get("views", args.viewId);
@@ -167,6 +168,7 @@ export const update = zMutation({
       groupBy: args.groupBy ?? undefined,
       subGroupBy: args.subGroupBy && args.subGroupBy !== args.groupBy ? args.subGroupBy : undefined,
       orderBy: args.orderBy ?? undefined,
+      showSubIssues: args.showSubIssues,
     });
     return view._id;
   },

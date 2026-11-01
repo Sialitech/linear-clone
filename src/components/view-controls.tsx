@@ -51,6 +51,7 @@ type ViewLayout = {
   groupBy: ViewGroup | null;
   subGroupBy: ViewGroup | null;
   orderBy: ViewOrder | null;
+  showSubIssues: boolean;
 };
 
 function layoutOf(view: SavedView): ViewLayout {
@@ -64,6 +65,7 @@ function layoutOf(view: SavedView): ViewLayout {
     groupBy: view.groupBy ?? null,
     subGroupBy: view.subGroupBy ?? null,
     orderBy: view.orderBy ?? null,
+    showSubIssues: view.showSubIssues !== false,
   };
 }
 
@@ -84,7 +86,12 @@ export default function ViewControls({
   view: SavedView;
   canEdit: boolean;
   title: string;
-  children: (layout: { groupBy: ViewGroup | null; subGroupBy: ViewGroup | null; orderBy: ViewOrder }) => ReactNode;
+  children: (layout: {
+    groupBy: ViewGroup | null;
+    subGroupBy: ViewGroup | null;
+    orderBy: ViewOrder;
+    showSubIssues: boolean;
+  }) => ReactNode;
 }) {
   const update = useMutation(api.views.update);
   const projects = useQuery(api.projects.list, { workspaceId: view.workspaceId });
@@ -129,6 +136,7 @@ export default function ViewControls({
         groupBy: snapshot.groupBy,
         subGroupBy: snapshot.subGroupBy,
         orderBy: snapshot.orderBy,
+        showSubIssues: snapshot.showSubIssues,
       });
     } catch (error) {
       sentKey.current = null;
@@ -432,6 +440,16 @@ export default function ViewControls({
                       setOpenMenu(null);
                     }}
                   />
+                  <label className="flex h-8 items-center gap-2 rounded-md px-2 text-[13px]">
+                    <GitBranch className="size-3.5 text-muted-foreground" />
+                    <span className="flex-1">Show sub-issues</span>
+                    <input
+                      type="checkbox"
+                      className="size-3.5 accent-foreground"
+                      checked={display.showSubIssues}
+                      onChange={(event) => commit({ showSubIssues: event.target.checked })}
+                    />
+                  </label>
                 </PopoverContent>
               </Popover>
             </div>
@@ -469,6 +487,7 @@ export default function ViewControls({
         groupBy: display.groupBy,
         subGroupBy: display.subGroupBy,
         orderBy: display.orderBy ?? "priority",
+        showSubIssues: display.showSubIssues,
       })}
     </>
   );
