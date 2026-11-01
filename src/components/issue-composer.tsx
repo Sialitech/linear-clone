@@ -84,6 +84,7 @@ export default function IssueComposer() {
   const labels = useQuery(api.labels.list, workspace ? { workspaceId: workspace._id } : "skip");
   const cycles = useQuery(api.cycles.list, workspace ? { workspaceId: workspace._id } : "skip");
   const createIssue = useMutation(api.issues.create);
+  const setParent = useMutation(api.issues.setParent);
   const updateIssue = useMutation(api.issues.update);
   const createLabel = useMutation(api.labels.create);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
@@ -184,7 +185,8 @@ export default function IssueComposer() {
           cycleId: draft.cycleId,
         });
       } else {
-        await createIssue({
+        const relation = composer?.mode === "create" ? composer.relation : undefined;
+        const createdId = await createIssue({
           projectId: draft.projectId,
           title: parsed.data.title,
           description: parsed.data.description,
@@ -194,7 +196,11 @@ export default function IssueComposer() {
           labelIds: draft.labelIds,
           dueDate,
           cycleId: draft.cycleId,
+          ...(relation?.kind === "child" ? { parentId: relation.issueId } : {}),
         });
+        if (relation?.kind === "parent") {
+          await setParent({ issueId: relation.issueId, parentId: createdId });
+        }
         posthog.capture("issue_created", {
           status: draft.status,
           priority: draft.priority,
@@ -241,7 +247,15 @@ export default function IssueComposer() {
     <Dialog open={open} onOpenChange={(next) => { if (!next) closeComposer(); }}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl" showCloseButton>
         <DialogHeader>
-          <DialogTitle>{composer?.mode === "edit" ? "Edit issue" : "New issue"}</DialogTitle>
+          <DialogTitle>
+            {composer?.mode === "edit"
+              ? "Edit issue"
+              : composer?.relation?.kind === "child"
+                ? "New sub-issue"
+                : composer?.relation?.kind === "parent"
+                  ? "New parent issue"
+                  : "New issue"}
+          </DialogTitle>
           <DialogDescription className="hidden sm:block">
             {me?.name ? `Creating as ${me.name}. ` : ""}
             Shortcuts: S status, P priority, A assignee, ⌘Enter save.

@@ -60,13 +60,9 @@ export default function IssueContextMenu({
   enableTouchMenu?: boolean;
 }) {
   const router = useRouter();
-  const { openEdit, me } = useWorkspace();
+  const { openEdit, openCreate, me } = useWorkspace();
   const update = useMutation(api.issues.update);
   const remove = useMutation(api.issues.remove);
-  const createIssue = useMutation(api.issues.create);
-  const setParent = useMutation(api.issues.setParent);
-  const [subIssueTitle, setSubIssueTitle] = useState("");
-  const [parentTitle, setParentTitle] = useState("");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [labelOverride, setLabelOverride] = useState<Id<"labels">[] | null>(null);
   const [dueError, setDueError] = useState<string | null>(null);
@@ -254,27 +250,12 @@ export default function IssueContextMenu({
     }
   }
 
-  async function createRelated(kind: "child" | "parent") {
-    const title = (kind === "child" ? subIssueTitle : parentTitle).trim();
-    if (!title) return;
-    try {
-      const createdId = await createIssue({
-        projectId: issue.projectId,
-        title,
-        status: issue.status,
-        priority: issue.priority,
-        ...(kind === "child" ? { parentId: issue._id } : {}),
-      });
-      if (kind === "parent") {
-        await setParent({ issueId: issue._id, parentId: createdId });
-      }
-      if (kind === "child") setSubIssueTitle("");
-      else setParentTitle("");
-      setMenu(null);
-      toast.success(kind === "child" ? "Sub-issue created" : "Parent issue created");
-    } catch (error) {
-      toast.error(errorMessage(error));
-    }
+  function openRelated(kind: "child" | "parent") {
+    setMenu(null);
+    openCreate({
+      projectId: issue.projectId,
+      relation: { kind, issueId: issue._id },
+    });
   }
 
   async function onDelete() {
@@ -496,7 +477,7 @@ export default function IssueContextMenu({
                   role="menu"
                   className={cn(
                     "fixed z-50 max-h-[min(70dvh,420px)] overflow-y-auto rounded-lg bg-popover p-1 text-[13px] text-popover-foreground shadow-lg ring-1 ring-foreground/10",
-                    menu.submenu === "due" || menu.submenu === "related" ? "w-72" : "w-60",
+                    menu.submenu === "due" ? "w-72" : "w-60",
                   )}
                   style={{ left: initialLeft + MENU_WIDTH + 4, top: initialTop, opacity: 0 }}
                   onMouseEnter={cancelHover}
@@ -666,36 +647,10 @@ export default function IssueContextMenu({
                     )
                   ) : null}
                   {menu.submenu === "related" ? (
-                    <div className="space-y-2 p-1">
-                      <form
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          void createRelated("child");
-                        }}
-                      >
-                        <div className="px-1 pb-1 text-[11px] text-muted-foreground">Sub-issue</div>
-                        <input
-                          value={subIssueTitle}
-                          onChange={(event) => setSubIssueTitle(event.target.value)}
-                          placeholder="New sub-issue title"
-                          className="h-8 w-full rounded-md border border-border bg-transparent px-2 text-xs outline-none"
-                        />
-                      </form>
-                      <form
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          void createRelated("parent");
-                        }}
-                      >
-                        <div className="px-1 pb-1 text-[11px] text-muted-foreground">Parent issue</div>
-                        <input
-                          value={parentTitle}
-                          onChange={(event) => setParentTitle(event.target.value)}
-                          placeholder="New parent title"
-                          className="h-8 w-full rounded-md border border-border bg-transparent px-2 text-xs outline-none"
-                        />
-                      </form>
-                    </div>
+                    <>
+                      <ChoiceRow label="Sub-issue…" onClick={() => openRelated("child")} />
+                      <ChoiceRow label="Parent issue…" onClick={() => openRelated("parent")} />
+                    </>
                   ) : null}
                 </div>
               ) : null}
