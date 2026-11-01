@@ -4,6 +4,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ViewGroup } from "@convex/model";
 import IssueList from "@/components/issue-list";
+import IssueSkeleton from "@/components/issue-skeleton";
 import PriorityIcon from "@/components/priority-icon";
 import StatusIcon from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
@@ -103,9 +104,9 @@ export default function SavedViewScreen({ viewId }: { viewId: string }) {
       ) : (
         <>
           <header className="flex min-h-12 items-center border-b border-border px-3 sm:px-4">
-            <h1 className="truncate text-sm font-medium">View</h1>
+            <span className="inline-block h-3.5 w-36 animate-pulse rounded-md bg-white/8" />
           </header>
-          <IssueList issues={issues} empty="No issues in this view." />
+          <IssueSkeleton />
         </>
       )}
     </div>

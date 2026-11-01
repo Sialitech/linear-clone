@@ -152,7 +152,19 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
   }
 
   if (issue === undefined) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading issue…</div>;
+    return (
+      <div className="flex h-full min-h-0 flex-col" aria-busy="true" aria-label="Loading issue">
+        <header className="flex min-h-12 items-center border-b border-border px-3 sm:px-4">
+          <span className="h-3.5 w-24 animate-pulse rounded-md bg-white/8" />
+        </header>
+        <div className="mx-auto w-full max-w-3xl space-y-3 p-6">
+          <div className="h-6 w-2/3 animate-pulse rounded-md bg-white/8" />
+          <div className="h-3 w-full animate-pulse rounded-md bg-white/8" />
+          <div className="h-3 w-5/6 animate-pulse rounded-md bg-white/8" />
+          <div className="h-3 w-3/5 animate-pulse rounded-md bg-white/8" />
+        </div>
+      </div>
+    );
   }
   if (issue === null) {
     return <div className="p-6 text-sm text-muted-foreground">Issue not found.</div>;
@@ -512,7 +524,10 @@ function SubIssues({
       </div>
       <ul className="divide-y divide-border rounded-md border border-border">
         {children === undefined ? (
-          <li className="px-3 py-2 text-xs text-muted-foreground">Loading sub-issues…</li>
+          <li className="flex items-center gap-2 px-3 py-2" aria-busy="true" aria-label="Loading sub-issues">
+            <span className="size-3.5 animate-pulse rounded-full bg-white/8" />
+            <span className="h-3 w-40 animate-pulse rounded-md bg-white/8" />
+          </li>
         ) : null}
         {children?.map((child) => (
           <li key={child._id} className="flex items-center gap-2 px-2 py-1.5">

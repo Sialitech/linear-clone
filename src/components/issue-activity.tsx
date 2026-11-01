@@ -86,7 +86,14 @@ export default function IssueActivity({ issueId }: { issueId: Id<"issues"> }) {
     return (
       <section className="mt-10">
         <h2 className="mb-3 text-sm font-medium">Activity</h2>
-        <p className="text-xs text-muted-foreground">Loading activity…</p>
+        <div className="space-y-3" aria-busy="true" aria-label="Loading activity">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <span className="size-5 animate-pulse rounded-full bg-white/8" />
+              <span className="h-3 w-48 animate-pulse rounded-md bg-white/8" />
+            </div>
+          ))}
+        </div>
       </section>
     );
   }

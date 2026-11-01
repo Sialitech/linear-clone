@@ -4,6 +4,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { ISSUE_STATUSES, type IssueStatus } from "@convex/model";
 import IssueContextMenu from "@/components/issue-context-menu";
+import IssueSkeleton from "@/components/issue-skeleton";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon from "@/components/priority-icon";
 import SubIssueProgress from "@/components/sub-issue-progress";
@@ -190,7 +191,7 @@ export default function KanbanBoard({
     : undefined;
 
   if (issues === undefined) {
-    return <div className="p-4 text-sm text-muted-foreground">Loading board…</div>;
+    return <IssueSkeleton variant="board" />;
   }
 
   return (

@@ -16,7 +16,24 @@ export default function ProjectsScreen() {
       <header className="flex min-h-12 items-center border-b border-border px-3 sm:px-4">
         <h1 className="text-sm font-medium">Projects</h1>
       </header>
-      <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
+      <div
+        className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3"
+        aria-busy={projects === undefined}
+        aria-label={projects === undefined ? "Loading projects" : undefined}
+      >
+        {projects === undefined
+          ? Array.from({ length: 6 }, (_, index) => (
+              <div key={index} className="rounded-lg border border-border px-4 py-3" aria-hidden>
+                <div className="flex items-center gap-2">
+                  <span className="size-2.5 animate-pulse rounded-sm bg-white/8" />
+                  <span className="h-3.5 w-32 animate-pulse rounded-md bg-white/8" />
+                  <span className="ml-auto h-3 w-10 animate-pulse rounded-md bg-white/8" />
+                </div>
+                <span className="mt-3 block h-3 w-4/5 animate-pulse rounded-md bg-white/8" />
+                <span className="mt-3 block h-2.5 w-16 animate-pulse rounded-md bg-white/8" />
+              </div>
+            ))
+          : null}
         {projects?.map((project) => (
           <Link
             key={project._id}
