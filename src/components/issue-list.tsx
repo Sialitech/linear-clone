@@ -5,7 +5,7 @@ import IssueContextMenu from "@/components/issue-context-menu";
 import IssueSelectionBar from "@/components/issue-selection-bar";
 import LabelChip from "@/components/label-chip";
 import SubIssueProgress from "@/components/sub-issue-progress";
-import PriorityIcon from "@/components/priority-icon";
+import PriorityPicker from "@/components/priority-picker";
 import StatusPicker from "@/components/status-picker";
 import UserAvatar from "@/components/user-avatar";
 import { errorMessage, formatDue, isOverdue } from "@/lib/format";
@@ -351,7 +351,7 @@ function IssueRows({
             });
           }}
         />
-        <PriorityIcon priority={issue.priority} />
+        <PriorityPicker issueId={issue._id} priority={issue.priority} />
         <span className="w-14 shrink-0 font-mono text-xs text-muted-foreground">{issue.identifier}</span>
         {depth > 0 ? <TreeMark /> : null}
         <StatusPicker issueId={issue._id} status={issue.status} />
