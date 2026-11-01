@@ -1,12 +1,11 @@
 import { ISSUE_STATUS_LABELS, type IssueStatus } from "@convex/model";
-import { Circle, CircleCheck, CircleDashed, CircleDot, CirclePlay } from "lucide-react";
 
 const color: Record<IssueStatus, string> = {
   backlog: "#8b8f98",
   todo: "#e4e4e7",
   in_progress: "#f2c94c",
-  in_review: "#5e6ad2",
-  done: "#4cb782",
+  in_review: "#4cb782",
+  done: "#5e6ad2",
 };
 
 export default function StatusIcon({
@@ -16,12 +15,51 @@ export default function StatusIcon({
   status: IssueStatus;
   className?: string;
 }) {
-  const props = { className, style: { color: color[status] }, "aria-hidden": true };
-  if (status === "backlog") return <CircleDashed {...props} />;
-  if (status === "todo") return <Circle {...props} />;
-  if (status === "in_progress") return <CirclePlay {...props} />;
-  if (status === "in_review") return <CircleDot {...props} />;
-  return <CircleCheck {...props} />;
+  const stroke = color[status];
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden>
+      {status === "backlog" ? (
+        <circle
+          cx="8"
+          cy="8"
+          r="6"
+          fill="none"
+          stroke={stroke}
+          strokeWidth="1.5"
+          strokeDasharray="2.2 2.15"
+          strokeLinecap="round"
+        />
+      ) : null}
+      {status === "todo" ? (
+        <circle cx="8" cy="8" r="6" fill="none" stroke={stroke} strokeWidth="1.5" />
+      ) : null}
+      {status === "in_progress" ? (
+        <>
+          <circle cx="8" cy="8" r="6" fill="none" stroke={stroke} strokeWidth="1.5" />
+          <path fill={stroke} d="M8 8 L8 2 A6 6 0 0 1 8 14 Z" />
+        </>
+      ) : null}
+      {status === "in_review" ? (
+        <>
+          <circle cx="8" cy="8" r="6" fill="none" stroke={stroke} strokeWidth="1.5" />
+          <path fill={stroke} d="M8 8 L8 2 A6 6 0 1 1 3.05 4.7 Z" />
+        </>
+      ) : null}
+      {status === "done" ? (
+        <>
+          <circle cx="8" cy="8" r="6.25" fill={stroke} />
+          <path
+            d="M5.1 8.15 L7.05 10.05 L10.9 6.15"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      ) : null}
+    </svg>
+  );
 }
 
 export function statusLabel(status: IssueStatus) {

@@ -6,7 +6,8 @@ import IssueSelectionBar from "@/components/issue-selection-bar";
 import LabelChip from "@/components/label-chip";
 import SubIssueProgress from "@/components/sub-issue-progress";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
-import StatusIcon, { statusLabel } from "@/components/status-icon";
+import StatusPicker from "@/components/status-picker";
+import { statusLabel } from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
 import { errorMessage, formatDue, isOverdue } from "@/lib/format";
 import { selectionAfterClick, selectionAfterSelectAll, type SelectionState } from "@/lib/issue-selection";
@@ -318,11 +319,13 @@ function IssueRows({
             });
           }}
         />
-        <Link href={`/issues/${issue._id}`} className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
             {depth > 0 ? <TreeMark /> : null}
-            <StatusIcon status={issue.status} className="mt-0.5 size-3.5 shrink-0" />
-            <span className="min-w-0 flex-1 text-[15px] leading-5 text-foreground">{issue.title}</span>
+            <StatusPicker issueId={issue._id} status={issue.status} className="mt-0.5" />
+            <Link href={`/issues/${issue._id}`} className="min-w-0 flex-1 text-[15px] leading-5 text-foreground">
+              {issue.title}
+            </Link>
             <UserAvatar user={issue.assignee} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-5 text-xs text-muted-foreground">
@@ -342,11 +345,15 @@ function IssueRows({
               <LabelChip key={label._id} name={label.name} color={label.color} />
             ))}
           </div>
-        </Link>
+        </div>
       </div>
       <Link
         href={`/issues/${issue._id}`}
         onClick={(event) => {
+          if ((event.target as HTMLElement).closest("button")) {
+            event.preventDefault();
+            return;
+          }
           if (event.shiftKey || event.metaKey || event.ctrlKey) {
             event.preventDefault();
             selectAt(issue._id, {
@@ -382,7 +389,7 @@ function IssueRows({
           <UserAvatar user={issue.assignee} />
         </span>
         <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
-          <StatusIcon status={issue.status} />
+          <StatusPicker issueId={issue._id} status={issue.status} />
           <span className="truncate">{statusLabel(issue.status)}</span>
         </span>
         <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
