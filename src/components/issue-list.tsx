@@ -3,6 +3,7 @@
 import IssueContextMenu from "@/components/issue-context-menu";
 import IssueSelectionBar from "@/components/issue-selection-bar";
 import LabelChip from "@/components/label-chip";
+import SubIssueProgress from "@/components/sub-issue-progress";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
@@ -255,6 +256,7 @@ function IssueRows({
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-5 text-xs text-muted-foreground">
             <span className="font-mono">{issue.identifier}</span>
+            <SubIssueProgress done={issue.subIssues.done} total={issue.subIssues.total} />
             <span className="inline-flex items-center gap-1">
               <PriorityIcon priority={issue.priority} />
               {priorityLabel(issue.priority)}
@@ -299,7 +301,10 @@ function IssueRows({
           />
         </span>
         <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
-        <span className="truncate text-foreground">{issue.title}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-foreground">{issue.title}</span>
+          <SubIssueProgress done={issue.subIssues.done} total={issue.subIssues.total} />
+        </span>
         <span className="flex justify-center">
           <UserAvatar user={issue.assignee} />
         </span>

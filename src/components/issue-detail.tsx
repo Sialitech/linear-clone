@@ -8,6 +8,7 @@ import IssueContextMenu from "@/components/issue-context-menu";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
+import SubIssueProgress from "@/components/sub-issue-progress";
 import UserAvatar from "@/components/user-avatar";
 import { useWorkspace } from "@/components/workspace-provider";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import {
   segmentCommentMentions,
   type MentionMember,
 } from "@/lib/mentions";
+import type { IssueItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Copy, ExternalLink, Unlink } from "lucide-react";
@@ -162,6 +164,15 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     <IssueContextMenu issue={issue}>
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex min-h-12 items-center gap-2 border-b border-border px-3 py-2 sm:gap-3 sm:px-4">
+        {issue.parent ? (
+          <Link
+            href={`/issues/${issue.parent._id}`}
+            className="shrink-0 font-mono text-xs text-muted-foreground hover:text-foreground"
+          >
+            {issue.parent.identifier}
+          </Link>
+        ) : null}
+        {issue.parent ? <span className="text-xs text-muted-foreground">/</span> : null}
         <Link href={`/projects/${issue.projectId}`} className="shrink-0 font-mono text-xs text-muted-foreground hover:text-foreground">
           {issue.identifier}
         </Link>
@@ -185,6 +196,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
               <p className="text-muted-foreground">No description yet.</p>
             )}
           </div>
+          <SubIssues issueId={id} projectId={issue.projectId} />
           <IssueActivity issueId={id} />
           <section className="mt-10">
             <div className="mb-3 flex items-center gap-2">
@@ -303,6 +315,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
               </DropdownMenuContent>
             </DropdownMenu>
           </Field>
+          <ParentField issue={issue} workspaceId={workspace?._id} />
           <Field label="Priority">
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="sm" />}>
@@ -462,6 +475,154 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
       </div>
     </div>
     </IssueContextMenu>
+  );
+}
+
+function SubIssues({
+  issueId,
+  projectId,
+}: {
+  issueId: Id<"issues">;
+  projectId: Id<"projects">;
+}) {
+  const children = useQuery(api.issues.children, { issueId });
+  const create = useMutation(api.issues.create);
+  const update = useMutation(api.issues.update);
+  const [title, setTitle] = useState("");
+  const total = children?.length ?? 0;
+  const done = children?.filter((child) => child.status === "done").length ?? 0;
+
+  async function onCreate(event: React.FormEvent) {
+    event.preventDefault();
+    const next = title.trim();
+    if (!next) return;
+    try {
+      await create({ projectId, title: next, parentId: issueId, status: "todo" });
+      setTitle("");
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  return (
+    <section className="mt-8">
+      <div className="mb-2 flex items-center gap-2">
+        <h2 className="text-sm font-medium">Sub-issues</h2>
+        <SubIssueProgress done={done} total={total} />
+      </div>
+      <ul className="divide-y divide-border rounded-md border border-border">
+        {children === undefined ? (
+          <li className="px-3 py-2 text-xs text-muted-foreground">Loading sub-issues…</li>
+        ) : null}
+        {children?.map((child) => (
+          <li key={child._id} className="flex items-center gap-2 px-2 py-1.5">
+            <button
+              type="button"
+              className="shrink-0"
+              aria-label={`Set ${child.identifier} to ${child.status === "done" ? "to do" : "done"}`}
+              onClick={() =>
+                void update({
+                  issueId: child._id,
+                  status: child.status === "done" ? "todo" : "done",
+                }).catch((error: unknown) => toast.error(errorMessage(error)))
+              }
+            >
+              <StatusIcon status={child.status} />
+            </button>
+            <Link href={`/issues/${child._id}`} className="shrink-0 font-mono text-xs text-muted-foreground">
+              {child.identifier}
+            </Link>
+            <Link href={`/issues/${child._id}`} className="min-w-0 flex-1 truncate text-sm">
+              {child.title}
+            </Link>
+          </li>
+        ))}
+        <li>
+          <form onSubmit={(event) => void onCreate(event)}>
+            <Input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Add sub-issue"
+              className="h-9 border-none text-sm shadow-none focus-visible:ring-0 sm:h-8"
+            />
+          </form>
+        </li>
+      </ul>
+    </section>
+  );
+}
+
+function ParentField({
+  issue,
+  workspaceId,
+}: {
+  issue: IssueItem;
+  workspaceId: Id<"workspaces"> | undefined;
+}) {
+  const setParent = useMutation(api.issues.setParent);
+  const [query, setQuery] = useState("");
+  const search = query.trim();
+  const results = useQuery(
+    api.issues.list,
+    workspaceId && search.length >= 2
+      ? { workspaceId, search }
+      : "skip",
+  );
+  const options = (results ?? []).filter((candidate) => candidate._id !== issue._id).slice(0, 8);
+
+  async function choose(parentId: Id<"issues"> | null) {
+    try {
+      await setParent({ issueId: issue._id, parentId });
+      setQuery("");
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  return (
+    <Field label="Parent">
+      <div className="space-y-1.5">
+        {issue.parent ? (
+          <div className="flex items-center gap-1 text-xs">
+            <Link href={`/issues/${issue.parent._id}`} className="min-w-0 flex-1 truncate hover:underline">
+              <span className="font-mono text-muted-foreground">{issue.parent.identifier}</span>{" "}
+              {issue.parent.title}
+            </Link>
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void choose(null)}>
+              Clear
+            </Button>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">No parent</span>
+        )}
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search parent issue"
+          className="h-9 text-xs sm:h-7"
+        />
+        {search.length >= 2 ? (
+          <ul className="max-h-40 overflow-auto rounded-md border border-border">
+            {options.length === 0 ? (
+              <li className="px-2 py-1.5 text-xs text-muted-foreground">No matches</li>
+            ) : (
+              options.map((candidate) => (
+                <li key={candidate._id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-white/5"
+                    onClick={() => void choose(candidate._id)}
+                  >
+                    <span className="shrink-0 font-mono text-muted-foreground">{candidate.identifier}</span>
+                    <span className="min-w-0 truncate">{candidate.title}</span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        ) : null}
+      </div>
+    </Field>
   );
 }
 
