@@ -219,7 +219,7 @@ export default function IssueList({
       })}
       {selectedCount > 0 ? (
         <IssueSelectionBar
-          issueIds={rows.filter((issue) => selected.has(issue._id)).map((issue) => issue._id)}
+          issues={rows.filter((issue) => selected.has(issue._id))}
           onClear={() => setSelection(emptySelection)}
         />
       ) : null}
