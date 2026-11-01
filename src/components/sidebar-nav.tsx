@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import UserAvatar from "@/components/user-avatar";
 import { errorMessage, projectColor } from "@/lib/format";
-import type { ViewItem } from "@/lib/types";
+import type { ProjectItem, ViewItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import posthog from "posthog-js";
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -148,46 +148,33 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
         </NavLink>
       </nav>
 
-      <div className="mt-4 px-3 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-        Projects
-      </div>
-      <div className="mt-1 min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3">
-        <div className="space-y-0.5">
-          {projects?.map((project) => {
-            const href = `/projects/${project._id}`;
-            return (
-              <Link
-                key={project._id}
-                href={href}
-                onClick={onNavigate}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                  roomy && "min-h-11",
-                  pathname.startsWith(href) && "bg-white/6 text-foreground",
-                )}
-              >
-                <span
-                  className="size-2 rounded-sm"
-                  style={{ backgroundColor: projectColor(project.key) }}
-                />
-                <span className="truncate">{project.name}</span>
-                <span className="ml-auto font-mono text-[10px] text-muted-foreground">
-                  {project.key}
-                </span>
-              </Link>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
-              roomy && "min-h-11",
-            )}
-          >
-            <Plus className="size-3.5" />
-            New project
-          </button>
+      <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3">
+        <div>
+          <div className="flex items-center gap-1 px-2 pb-1">
+            <div className="min-w-0 flex-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+              Projects
+            </div>
+            <button
+              type="button"
+              aria-label="New project"
+              onClick={() => setCreating(true)}
+              className={cn(
+                "inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                roomy ? "size-10" : "size-5",
+              )}
+            >
+              <Plus className={roomy ? "size-4" : "size-3.5"} />
+            </button>
+          </div>
+          {projects?.map((project) => (
+            <ProjectRow
+              key={project._id}
+              project={project}
+              active={pathname.startsWith(`/projects/${project._id}`)}
+              onNavigate={onNavigate}
+              roomy={roomy}
+            />
+          ))}
         </div>
 
         <div>
@@ -270,6 +257,179 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
         </>
       ) : null}
     </div>
+  );
+}
+
+function ProjectRow({
+  project,
+  active,
+  onNavigate,
+  roomy,
+}: {
+  project: ProjectItem;
+  active: boolean;
+  onNavigate?: () => void;
+  roomy: boolean;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const update = useMutation(api.projects.update);
+  const remove = useMutation(api.projects.remove);
+  const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description);
+  const [pending, setPending] = useState(false);
+  const href = `/projects/${project._id}`;
+
+  async function onEdit(event: React.FormEvent) {
+    event.preventDefault();
+    const parsed = zName.safeParse(name);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Enter a project name");
+      return;
+    }
+    const nextDescription = description.trim();
+    if (nextDescription.length > 2000) {
+      toast.error("Description is too long");
+      return;
+    }
+    if (parsed.data === project.name && nextDescription === project.description) {
+      setEditing(false);
+      return;
+    }
+    setPending(true);
+    try {
+      await update({
+        projectId: project._id,
+        name: parsed.data,
+        description: nextDescription,
+      });
+      setEditing(false);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function onDelete() {
+    setPending(true);
+    try {
+      await remove({ projectId: project._id });
+      setConfirmingDelete(false);
+      if (pathname.startsWith(href)) router.push("/projects");
+      onNavigate?.();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <>
+      <div
+        className={cn(
+          "flex items-center rounded-md text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+          roomy && "min-h-11",
+          active && "bg-white/6 text-foreground",
+        )}
+      >
+        <Link
+          href={href}
+          onClick={onNavigate}
+          className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5"
+        >
+          <span
+            className="size-2 shrink-0 rounded-sm"
+            style={{ backgroundColor: projectColor(project.key) }}
+          />
+          <span className="truncate">{project.name}</span>
+          <span className="ml-auto font-mono text-[10px] text-muted-foreground">{project.key}</span>
+        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label={`Actions for ${project.name}`}
+                className={cn(
+                  "mr-1 inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                  roomy ? "size-10" : "size-6",
+                )}
+              />
+            }
+          >
+            <MoreHorizontal className={roomy ? "size-4" : "size-3.5"} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" align="start" className="w-40">
+            <DropdownMenuItem
+              onClick={() => {
+                setName(project.name);
+                setDescription(project.description);
+                setEditing(true);
+              }}
+            >
+              <Pencil className="size-3.5" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={() => setConfirmingDelete(true)}>
+              <Trash2 className="size-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <Dialog open={editing} onOpenChange={setEditing}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit project</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onEdit} className="space-y-3">
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              aria-label="Project name"
+              placeholder="Project name"
+              autoFocus
+            />
+            <Input
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              aria-label="Project description"
+              placeholder="Description"
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditing(false)} disabled={pending}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={pending}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete project</DialogTitle>
+            <DialogDescription>
+              Delete “{project.name}”? Its issues are deleted with it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void onDelete()} disabled={pending}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
