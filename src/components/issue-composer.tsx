@@ -13,6 +13,7 @@ import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
 import { useWorkspace } from "@/components/workspace-provider";
+import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -193,6 +194,11 @@ export default function IssueComposer() {
           labelIds: draft.labelIds,
           dueDate,
           cycleId: draft.cycleId,
+        });
+        posthog.capture("issue_created", {
+          status: draft.status,
+          priority: draft.priority,
+          has_assignee: Boolean(draft.assigneeId),
         });
       }
       closeComposer();

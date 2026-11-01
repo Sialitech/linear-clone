@@ -23,6 +23,7 @@ import UserAvatar from "@/components/user-avatar";
 import { errorMessage, projectColor } from "@/lib/format";
 import type { ViewItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import posthog from "posthog-js";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -75,6 +76,7 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
   }, [workspace, pruneSeeded]);
 
   async function logout() {
+    posthog.reset();
     await signOut();
     router.push("/login");
     router.refresh();

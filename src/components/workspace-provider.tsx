@@ -6,6 +6,7 @@ import type { IssueStatus, Priority } from "@convex/model";
 import { errorMessage } from "@/lib/format";
 import type { IssueItem, WorkspaceItem } from "@/lib/types";
 import { useMutation, useQuery } from "convex/react";
+import posthog from "posthog-js";
 import {
   createContext,
   useContext,
@@ -62,6 +63,14 @@ export default function WorkspaceProvider({ children }: { children: ReactNode })
   }, [workspaces, ensureWorkspace]);
 
   useEffect(() => {
+    if (!me?._id) return;
+    posthog.identify(me._id, {
+      email: me.email,
+      name: me.name,
+    });
+  }, [me]);
+
+  useEffect(() => {
     if (!workspaces || workspaces.length === 0) return;
     const stored = window.localStorage.getItem(STORAGE_KEY);
     const fallback = workspaces.find((workspace) => workspace._id === stored) ?? workspaces[0];
@@ -76,6 +85,11 @@ export default function WorkspaceProvider({ children }: { children: ReactNode })
     () => workspaces?.find((item) => item._id === workspaceId) ?? null,
     [workspaces, workspaceId],
   );
+
+  useEffect(() => {
+    if (!workspace) return;
+    posthog.group("workspace", workspace._id, { name: workspace.name });
+  }, [workspace]);
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({
