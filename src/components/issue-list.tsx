@@ -5,11 +5,11 @@ import IssueContextMenu from "@/components/issue-context-menu";
 import IssueSelectionBar from "@/components/issue-selection-bar";
 import LabelChip from "@/components/label-chip";
 import SubIssueProgress from "@/components/sub-issue-progress";
-import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
-import StatusIcon, { statusLabel } from "@/components/status-icon";
+import PriorityIcon from "@/components/priority-icon";
+import StatusPicker from "@/components/status-picker";
 import UserAvatar from "@/components/user-avatar";
 import { errorMessage, formatDue, isOverdue } from "@/lib/format";
-import { selectionAfterClick, selectionAfterSelectAll, type SelectionState } from "@/lib/issue-selection";
+import { selectionAfterClick, type SelectionState } from "@/lib/issue-selection";
 import { nestIssues } from "@/lib/issue-tree";
 import type { IssueItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -20,9 +20,6 @@ import { useEffect, useMemo, useState, type DragEvent, type MouseEvent, type Rea
 import { toast } from "sonner";
 
 const emptySelection: SelectionState = { selected: [], anchorId: null };
-
-const tableRow =
-  "hidden items-center gap-2 px-4 py-2 text-[13px] md:grid md:grid-cols-[1.75rem_4.75rem_minmax(0,1fr)_2.25rem_7.5rem_6.5rem_4.25rem] lg:grid-cols-[1.75rem_5.5rem_minmax(0,1fr)_2.25rem_8.25rem_6.75rem_9rem_4.25rem]";
 
 export type IssueListGroup = {
   key: string;
@@ -80,7 +77,6 @@ export default function IssueList({
   const orderKey = orderedIds.join("|");
   const selected = new Set(selection.selected);
   const selectedCount = rows.filter((issue) => selected.has(issue._id)).length;
-  const allSelected = rows.length > 0 && selectedCount === rows.length;
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -136,37 +132,6 @@ export default function IssueList({
         !nested && "min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]",
       )}
     >
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase md:hidden">
-        <IssueCheckbox
-          checked={allSelected}
-          indeterminate={selectedCount > 0 && !allSelected}
-          label={allSelected ? "Clear selection" : "Select all issues"}
-          onClick={() => setSelection(selectionAfterSelectAll(orderedIds, allSelected))}
-        />
-        <span>Select</span>
-      </div>
-      <div
-        className={cn(
-          tableRow,
-          "sticky top-0 z-10 border-b border-border bg-background text-[11px] font-medium tracking-wide text-muted-foreground uppercase",
-        )}
-      >
-        <span className="flex justify-center">
-          <IssueCheckbox
-            checked={allSelected}
-            indeterminate={selectedCount > 0 && !allSelected}
-            label={allSelected ? "Clear selection" : "Select all issues"}
-            onClick={() => setSelection(selectionAfterSelectAll(orderedIds, allSelected))}
-          />
-        </span>
-        <span>ID</span>
-        <span>Title</span>
-        <span />
-        <span>Status</span>
-        <span>Priority</span>
-        <span className="hidden lg:block">Labels</span>
-        <span>Due</span>
-      </div>
       {sections.map((section) => {
         const isCollapsed = collapsed.includes(section.key);
         return (
@@ -306,7 +271,10 @@ function IssueRows({
       onDragLeave={() => onDragOverIssue(null)}
       onDrop={onDropIssue}
     >
-      <div className="flex items-start gap-2 px-3 py-3 sm:px-4 md:hidden" style={{ paddingLeft: 12 + indent }}>
+      <div
+        className="flex items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-white/[0.03] sm:px-4"
+        style={{ paddingLeft: 12 + indent }}
+      >
         <IssueCheckbox
           checked={isSelected}
           label={isSelected ? `Deselect ${issue.identifier}` : `Select ${issue.identifier}`}
@@ -318,91 +286,43 @@ function IssueRows({
             });
           }}
         />
-        <Link href={`/issues/${issue._id}`} className="min-w-0 flex-1">
-          <div className="flex items-start gap-2">
-            {depth > 0 ? <TreeMark /> : null}
-            <StatusIcon status={issue.status} className="mt-0.5 size-3.5 shrink-0" />
-            <span className="min-w-0 flex-1 text-[15px] leading-5 text-foreground">{issue.title}</span>
-            <UserAvatar user={issue.assignee} />
-          </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-5 text-xs text-muted-foreground">
-            <span className="font-mono">{issue.identifier}</span>
-            <SubIssueProgress done={issue.subIssues.done} total={issue.subIssues.total} />
-            <span className="inline-flex items-center gap-1">
-              <PriorityIcon priority={issue.priority} />
-              {priorityLabel(issue.priority)}
-            </span>
-            <span>{statusLabel(issue.status)}</span>
-            {issue.dueDate ? (
-              <span className={cn(isOverdue(issue.dueDate, issue.status) && "text-destructive")}>
-                {formatDue(issue.dueDate)}
-              </span>
-            ) : null}
-            {issue.labels.slice(0, 2).map((label) => (
-              <LabelChip key={label._id} name={label.name} color={label.color} />
-            ))}
-          </div>
-        </Link>
-      </div>
-      <Link
-        href={`/issues/${issue._id}`}
-        onClick={(event) => {
-          if (event.shiftKey || event.metaKey || event.ctrlKey) {
-            event.preventDefault();
-            selectAt(issue._id, {
-              shiftKey: event.shiftKey,
-              toggleKey: event.metaKey || event.ctrlKey,
-            });
-          }
-        }}
-        className={cn(tableRow, "select-none hover:bg-white/[0.03]", isSelected && "hover:bg-primary/15")}
-        style={{ paddingLeft: 16 + indent }}
-      >
-        <span className="flex justify-center">
-          <IssueCheckbox
-            checked={isSelected}
-            label={isSelected ? `Deselect ${issue.identifier}` : `Select ${issue.identifier}`}
-            onClick={(event) => {
+        <PriorityIcon priority={issue.priority} />
+        <span className="w-14 shrink-0 font-mono text-xs text-muted-foreground">{issue.identifier}</span>
+        {depth > 0 ? <TreeMark /> : null}
+        <StatusPicker issueId={issue._id} status={issue.status} />
+        <Link
+          href={`/issues/${issue._id}`}
+          onClick={(event) => {
+            if (event.shiftKey || event.metaKey || event.ctrlKey) {
               event.preventDefault();
-              event.stopPropagation();
               selectAt(issue._id, {
                 shiftKey: event.shiftKey,
                 toggleKey: event.metaKey || event.ctrlKey,
               });
-            }}
-          />
-        </span>
-        <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
-        <span className="flex min-w-0 items-center gap-2">
-          {depth > 0 ? <TreeMark /> : null}
-          <span className="truncate text-foreground">{issue.title}</span>
-          <SubIssueProgress done={issue.subIssues.done} total={issue.subIssues.total} />
-        </span>
-        <span className="flex justify-center">
-          <UserAvatar user={issue.assignee} />
-        </span>
-        <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
-          <StatusIcon status={issue.status} />
-          <span className="truncate">{statusLabel(issue.status)}</span>
-        </span>
-        <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
-          <PriorityIcon priority={issue.priority} />
-          <span className="truncate">{priorityLabel(issue.priority)}</span>
-        </span>
-        <span className="hidden min-w-0 items-center gap-1 lg:flex">
+            }
+          }}
+          className="min-w-0 flex-1 truncate text-foreground"
+        >
+          {issue.title}
+        </Link>
+        <SubIssueProgress done={issue.subIssues.done} total={issue.subIssues.total} />
+        <span className="hidden min-w-0 items-center gap-1 sm:flex">
           {issue.labels.slice(0, 2).map((label) => (
             <LabelChip key={label._id} name={label.name} color={label.color} />
           ))}
         </span>
-        <span
-          className={cn(
-            "text-xs text-muted-foreground",
-            issue.dueDate && isOverdue(issue.dueDate, issue.status) && "text-destructive",
-          )}
-        >
-          {issue.dueDate ? formatDue(issue.dueDate) : ""}
-        </span>
-      </Link>
+        {issue.dueDate ? (
+          <span
+            className={cn(
+              "hidden shrink-0 text-xs text-muted-foreground sm:inline",
+              isOverdue(issue.dueDate, issue.status) && "text-destructive",
+            )}
+          >
+            {formatDue(issue.dueDate)}
+          </span>
+        ) : null}
+        <UserAvatar user={issue.assignee} />
+      </div>
     </div>
   );
 }
