@@ -14,7 +14,7 @@ import { errorMessage } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutation } from "convex/react";
 import { Check } from "lucide-react";
-import { useEffect, useState, type MouseEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useState, type MouseEvent, type PointerEvent } from "react";
 import { toast } from "sonner";
 
 export default function StatusPicker({
@@ -29,6 +29,19 @@ export default function StatusPicker({
   const update = useMutation(api.issues.update);
   const [open, setOpen] = useState(false);
 
+  const apply = useCallback(
+    async (next: IssueStatus) => {
+      setOpen(false);
+      if (next === status) return;
+      try {
+        await update({ issueId, status: next });
+      } catch (error) {
+        toast.error(errorMessage(error));
+      }
+    },
+    [issueId, status, update],
+  );
+
   useEffect(() => {
     if (!open) return;
     function onKey(event: KeyboardEvent) {
@@ -42,17 +55,7 @@ export default function StatusPicker({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, issueId, status]);
-
-  async function apply(next: IssueStatus) {
-    setOpen(false);
-    if (next === status) return;
-    try {
-      await update({ issueId, status: next });
-    } catch (error) {
-      toast.error(errorMessage(error));
-    }
-  }
+  }, [open, apply]);
 
   function keepInRow(event: MouseEvent | PointerEvent) {
     event.stopPropagation();
