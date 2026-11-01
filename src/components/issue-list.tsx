@@ -16,7 +16,8 @@ import { cn } from "@/lib/utils";
 import { useMutation } from "convex/react";
 import { Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 const emptySelection: SelectionState = { selected: [], anchorId: null };
@@ -52,6 +53,8 @@ export default function IssueList({
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [dock, setDock] = useState<{ left: number; width: number; bottom: number } | null>(null);
 
   const sections = useMemo(() => {
     if (groups) return groups.filter((group) => group.issues.length > 0);
@@ -85,6 +88,35 @@ export default function IssueList({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || selectedCount === 0) return;
+    const port = visiblePort(root);
+    function update() {
+      const portRect = port.getBoundingClientRect();
+      const rootRect = root!.getBoundingClientRect();
+      const left = Math.max(portRect.left, rootRect.left);
+      const right = Math.min(portRect.right, rootRect.right);
+      setDock({
+        left,
+        width: Math.max(0, right - left),
+        bottom: Math.max(0, window.innerHeight - portRect.bottom),
+      });
+    }
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(port);
+    observer.observe(root);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      setDock(null);
+    };
+  }, [selectedCount, rows.length]);
 
   useEffect(() => {
     setSelection((current) => {
@@ -127,9 +159,11 @@ export default function IssueList({
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         "relative",
-        !nested && "min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]",
+        !nested && "min-h-0 flex-1 overflow-auto",
+        selectedCount > 0 && "pb-24",
       )}
     >
       {sections.map((section) => {
@@ -217,14 +251,45 @@ export default function IssueList({
           </div>
         );
       })}
-      {selectedCount > 0 ? (
-        <IssueSelectionBar
-          issues={rows.filter((issue) => selected.has(issue._id))}
-          onClear={() => setSelection(emptySelection)}
-        />
-      ) : null}
+      {selectedCount > 0 && dock && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-30 flex justify-center px-3"
+              style={{
+                left: dock.left,
+                width: dock.width,
+                bottom: `calc(${dock.bottom}px + max(1rem, env(safe-area-inset-bottom)))`,
+              }}
+            >
+              <div className="pointer-events-auto max-w-full">
+                <IssueSelectionBar
+                  issues={rows.filter((issue) => selected.has(issue._id))}
+                  onClear={() => setSelection(emptySelection)}
+                />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
+}
+
+function visiblePort(root: HTMLElement) {
+  const chain: HTMLElement[] = [];
+  let node: HTMLElement | null = root;
+  while (node) {
+    chain.push(node);
+    node = node.parentElement;
+  }
+  for (const element of chain) {
+    const overflow = getComputedStyle(element).overflowY;
+    const clips = overflow === "auto" || overflow === "scroll" || overflow === "overlay";
+    if (!clips) continue;
+    if (element.clientHeight + 1 < root.scrollHeight) return element;
+    if (element.clientHeight > root.getBoundingClientRect().height + 8) return element;
+  }
+  return root;
 }
 
 function IssueRows({
