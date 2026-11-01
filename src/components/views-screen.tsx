@@ -72,13 +72,14 @@ export default function SavedViewScreen({ viewId }: { viewId: string }) {
     <div className="flex h-full min-h-0 flex-col">
       {view ? (
         <ViewControls view={view} canEdit={canEdit} title={view.name}>
-          {({ groupBy, subGroupBy, orderBy }) => {
+          {({ groupBy, subGroupBy, orderBy, showSubIssues }) => {
             const ordered = issues ? sortIssues(issues, orderBy) : undefined;
             const nestedBy = subGroupBy && subGroupBy !== groupBy ? subGroupBy : null;
             return (
               <IssueList
                 issues={ordered}
                 preserveOrder
+                showSubIssues={showSubIssues}
                 empty={hasFilter ? "No issues match these filters." : "No issues in this view."}
                 groups={
                   groupBy && ordered

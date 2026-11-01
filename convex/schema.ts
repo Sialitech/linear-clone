@@ -199,6 +199,7 @@ export default defineSchema({
     groupBy: v.optional(viewGroup),
     subGroupBy: v.optional(viewGroup),
     orderBy: v.optional(viewOrder),
+    showSubIssues: v.optional(v.boolean()),
     createdAt: v.number(),
   })
     .index("by_workspace", ["workspaceId"])
