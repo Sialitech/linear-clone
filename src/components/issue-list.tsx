@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import IssueContextMenu from "@/components/issue-context-menu";
+import IssueSkeleton from "@/components/issue-skeleton";
 import IssueSelectionBar from "@/components/issue-selection-bar";
 import LabelChip from "@/components/label-chip";
 import SubIssueProgress from "@/components/sub-issue-progress";
@@ -129,7 +130,7 @@ export default function IssueList({
   }, [orderKey, orderedIds]);
 
   if (issues === undefined) {
-    return <div className="px-4 py-8 text-sm text-muted-foreground">Loading issues…</div>;
+    return <IssueSkeleton />;
   }
   if (rows.length === 0) {
     return <div className="px-4 py-16 text-center text-sm text-muted-foreground">{empty}</div>;

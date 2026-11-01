@@ -94,10 +94,16 @@ export default function ProjectScreen({
       <header className="flex min-h-12 items-center gap-2 border-b border-border px-3 py-2 sm:px-4">
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-sm font-medium">
-            {project?.name ?? "Project"}
-            {project?.key ? (
-              <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">{project.key}</span>
-            ) : null}
+            {project ? (
+              <>
+                {project.name}
+                {project.key ? (
+                  <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">{project.key}</span>
+                ) : null}
+              </>
+            ) : (
+              <span className="inline-block h-3.5 w-32 animate-pulse rounded-md bg-white/8 align-middle" />
+            )}
           </h1>
         </div>
         <div className="flex shrink-0 items-center gap-1">

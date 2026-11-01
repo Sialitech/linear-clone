@@ -138,7 +138,14 @@ export default function CyclesScreen() {
 
       <div className="min-h-0 flex-1 overflow-auto pb-[env(safe-area-inset-bottom)]">
         {cycles === undefined ? (
-          <div className="px-4 py-8 text-sm text-muted-foreground">Loading cycles…</div>
+          <div className="space-y-3 p-3 sm:p-4" aria-busy="true" aria-label="Loading cycles">
+            {Array.from({ length: 3 }, (_, index) => (
+              <div key={index} className="rounded-lg border border-border px-4 py-3">
+                <div className="h-3.5 w-32 animate-pulse rounded-md bg-white/8" />
+                <div className="mt-3 h-3 w-48 animate-pulse rounded-md bg-white/8" />
+              </div>
+            ))}
+          </div>
         ) : cycles.length === 0 ? (
           <div className="px-4 py-16 text-center text-sm text-muted-foreground">
             No cycles yet. Create Cycle 1 to start a cadence for this workspace.
