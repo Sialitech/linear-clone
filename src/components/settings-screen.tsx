@@ -14,6 +14,9 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 const profileSchema = z.object({ name: z.string().trim().min(1, "Enter a name").max(80) });
+const workspaceSchema = z.object({
+  name: z.string().trim().min(1, "Enter a workspace name").max(80),
+});
 const memberSchema = z.object({
   email: z.string().trim().email("Enter a valid email"),
   role: z.enum(["admin", "member"]),
@@ -44,12 +47,14 @@ export default function SettingsScreen() {
     workspace ? { workspaceId: workspace._id } : "skip",
   );
   const updateProfile = useMutation(api.users.updateProfile);
+  const renameWorkspace = useMutation(api.users.renameWorkspace);
   const addMember = useMutation(api.users.addMember);
   const setProjectRepo = useMutation(api.github.setProjectRepo);
   const clearProjectRepo = useMutation(api.github.clearProjectRepo);
   const beginOAuth = useMutation(api.github.beginOAuth);
   const disconnectGithub = useAction(api.github.disconnect);
   const [name, setName] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "member">("member");
   const [projectId, setProjectId] = useState("");
@@ -59,6 +64,10 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (me?.name) setName(me.name);
   }, [me?.name]);
+
+  useEffect(() => {
+    if (workspace?.name) setWorkspaceName(workspace.name);
+  }, [workspace?.name]);
 
   useEffect(() => {
     if (!projects || projects.length === 0) return;
@@ -107,6 +116,22 @@ export default function SettingsScreen() {
     try {
       await updateProfile(parsed.data);
       toast.success("Profile saved");
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  async function onWorkspace(event: React.FormEvent) {
+    event.preventDefault();
+    if (!workspace) return;
+    const parsed = workspaceSchema.safeParse({ name: workspaceName });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Check the workspace name");
+      return;
+    }
+    try {
+      await renameWorkspace({ workspaceId: workspace._id, name: parsed.data.name });
+      toast.success("Workspace renamed");
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -211,6 +236,27 @@ export default function SettingsScreen() {
             <p className="text-xs text-muted-foreground">{me?.email}</p>
             <Button type="submit" size="sm">Save profile</Button>
           </form>
+        </section>
+        <section>
+          <h2 className="text-sm font-medium">Workspace</h2>
+          {canManage ? (
+            <form onSubmit={onWorkspace} className="mt-3 space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="workspace-name">Name</Label>
+                <Input
+                  id="workspace-name"
+                  value={workspaceName}
+                  onChange={(event) => setWorkspaceName(event.target.value)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">{workspace?.slug}</p>
+              <Button type="submit" size="sm">Save workspace</Button>
+            </form>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              {workspace?.name}. Only owners and admins can rename the workspace.
+            </p>
+          )}
         </section>
         <section>
           <h2 className="text-sm font-medium">Members</h2>
