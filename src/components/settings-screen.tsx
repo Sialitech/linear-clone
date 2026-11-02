@@ -249,7 +249,6 @@ export default function SettingsScreen() {
                   onChange={(event) => setWorkspaceName(event.target.value)}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">{workspace?.slug}</p>
               <Button type="submit" size="sm">Save workspace</Button>
             </form>
           ) : (
