@@ -81,5 +81,6 @@ https://<your-deployment>.convex.site/github/oauth/callback
    - `SITE_URL` to the Vercel production URL (for example `https://your-app.vercel.app`)
    - `JWT_PRIVATE_KEY` and `JWKS` (generate them with `npx @convex-dev/auth`, choosing the production deployment)
    - `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` if you want Google sign-in
+   - `AUTH_PASSWORD_DISABLED=true` to turn off email and password sign-in (the production Vercel build sets this automatically)
 
 Preview deployments need `CONVEX_DEPLOY_KEY` as well if you want them to build. The instructions above keep that key on Production only.
