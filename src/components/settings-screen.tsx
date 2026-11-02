@@ -29,6 +29,11 @@ const repoSchema = z.object({
 export default function SettingsScreen() {
   const { workspace, me } = useWorkspace();
   const members = useQuery(api.users.listMembers, workspace ? { workspaceId: workspace._id } : "skip");
+  const canManageMembers = workspace?.role === "owner" || workspace?.role === "admin";
+  const invites = useQuery(
+    api.users.listInvites,
+    workspace && canManageMembers ? { workspaceId: workspace._id } : "skip",
+  );
   const projects = useQuery(api.projects.list, workspace ? { workspaceId: workspace._id } : "skip");
   const projectRepos = useQuery(
     api.github.listProjectRepos,
@@ -116,9 +121,13 @@ export default function SettingsScreen() {
       return;
     }
     try {
-      await addMember({ workspaceId: workspace._id, ...parsed.data });
+      const result = await addMember({ workspaceId: workspace._id, ...parsed.data });
       setEmail("");
-      toast.success("Member added");
+      toast.success(
+        result.status === "invited"
+          ? "Invitation saved. They join when they sign up with that email."
+          : "Member added",
+      );
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -218,6 +227,15 @@ export default function SettingsScreen() {
               </div>
             ))}
           </div>
+          {canManage && (invites?.length ?? 0) > 0 ? (
+            <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+              {invites?.map((invite) => (
+                <li key={invite._id}>
+                  {invite.email} · invited as {invite.role}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {canManage ? (
             <form onSubmit={onMember} className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <Input

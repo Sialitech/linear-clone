@@ -79,6 +79,16 @@ export default defineSchema({
     .index("by_workspace", ["workspaceId"])
     .index("by_user", ["userId"])
     .index("by_workspace_and_user", ["workspaceId", "userId"]),
+  invites: defineTable({
+    workspaceId: v.id("workspaces"),
+    email: v.string(),
+    role: v.union(v.literal("admin"), v.literal("member")),
+    invitedBy: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_email", ["email"])
+    .index("by_workspace_and_email", ["workspaceId", "email"]),
   projects: defineTable({
     name: v.string(),
     description: v.string(),
