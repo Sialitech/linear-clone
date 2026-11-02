@@ -1,4 +1,4 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npx convex deploy --cmd 'npm run build' && if [ \"$VERCEL_ENV\" = preview ]; then npx convex env set --preview-name \"${VERCEL_GIT_COMMIT_REF}\" SITE_URL \"https://${VERCEL_BRANCH_URL:-$VERCEL_URL}\"; fi && if [ \"$VERCEL_ENV\" = production ]; then npx convex env set AUTH_PASSWORD_DISABLED true; fi"
+  "buildCommand": "npx convex deploy --cmd 'npm run build' && npm run convex:postdeploy"
 }

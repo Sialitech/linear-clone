@@ -10,7 +10,8 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "vercel-build": "npx convex deploy --cmd 'npm run build'"
+    "convex:postdeploy": "if [ \"$VERCEL_ENV\" = preview ]; then npx convex env set --preview-name \"$VERCEL_GIT_COMMIT_REF\" SITE_URL \"https://${VERCEL_BRANCH_URL:-$VERCEL_URL}\"; fi; if [ \"$VERCEL_ENV\" = production ]; then npx convex env set AUTH_PASSWORD_DISABLED true; fi",
+    "vercel-build": "npx convex deploy --cmd 'npm run build' && npm run convex:postdeploy"
   },
   "dependencies": {
     "@auth/core": "^0.41.3",
