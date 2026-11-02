@@ -40,6 +40,19 @@ export const updateProfile = zMutation({
   },
 });
 
+export const renameWorkspace = zMutation({
+  args: {
+    workspaceId: workspaceIdSchema,
+    name: z.string().trim().min(1).max(80),
+  },
+  handler: async (ctx, args) => {
+    const { membership } = await requireWorkspaceMember(ctx, args.workspaceId);
+    assertCanManage(membership);
+    await ctx.db.patch("workspaces", args.workspaceId, { name: args.name });
+    return args.workspaceId;
+  },
+});
+
 export const myWorkspaces = zQuery({
   args: {},
   handler: async (ctx) => {
