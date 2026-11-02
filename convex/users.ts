@@ -1,4 +1,6 @@
+import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { z } from "zod";
 import {
   assertCanManage,
@@ -83,6 +85,47 @@ export const listMembers = zQuery({
   },
 });
 
+async function findUserByEmail(ctx: MutationCtx, email: string) {
+  const normalized = email.trim().toLowerCase();
+  const variants = normalized === email.trim() ? [normalized] : [normalized, email.trim()];
+  for (const variant of variants) {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", variant))
+      .first();
+    if (user) return user;
+  }
+  return null;
+}
+
+async function claimInvites(ctx: MutationCtx, userId: Id<"users">) {
+  const user = await ctx.db.get("users", userId);
+  const email = user?.email?.trim().toLowerCase();
+  if (!email) return;
+  const invites = await ctx.db
+    .query("invites")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .take(50);
+  const now = Date.now();
+  for (const invite of invites) {
+    const existing = await ctx.db
+      .query("members")
+      .withIndex("by_workspace_and_user", (q) =>
+        q.eq("workspaceId", invite.workspaceId).eq("userId", userId),
+      )
+      .unique();
+    if (!existing) {
+      await ctx.db.insert("members", {
+        workspaceId: invite.workspaceId,
+        userId,
+        role: invite.role,
+        joinedAt: now,
+      });
+    }
+    await ctx.db.delete("invites", invite._id);
+  }
+}
+
 export const addMember = zMutation({
   args: {
     workspaceId: workspaceIdSchema,
@@ -90,15 +133,29 @@ export const addMember = zMutation({
     role: z.enum(["admin", "member"]),
   },
   handler: async (ctx, args) => {
-    const { membership } = await requireWorkspaceMember(ctx, args.workspaceId);
+    const { userId, membership } = await requireWorkspaceMember(ctx, args.workspaceId);
     assertCanManage(membership);
-    const email = args.email.toLowerCase();
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", email))
-      .unique();
+    const email = args.email.trim().toLowerCase();
+    const user = await findUserByEmail(ctx, email);
     if (!user) {
-      throw new Error("No user with that email has signed up yet");
+      const pending = await ctx.db
+        .query("invites")
+        .withIndex("by_workspace_and_email", (q) =>
+          q.eq("workspaceId", args.workspaceId).eq("email", email),
+        )
+        .unique();
+      if (pending) {
+        await ctx.db.patch("invites", pending._id, { role: args.role });
+        return { status: "invited" as const };
+      }
+      await ctx.db.insert("invites", {
+        workspaceId: args.workspaceId,
+        email,
+        role: args.role,
+        invitedBy: userId,
+        createdAt: Date.now(),
+      });
+      return { status: "invited" as const };
     }
     const existing = await ctx.db
       .query("members")
@@ -107,7 +164,7 @@ export const addMember = zMutation({
       )
       .unique();
     if (existing) {
-      throw new Error("That user is already a member");
+      throw new ConvexError("That person is already a member");
     }
     await ctx.db.insert("members", {
       workspaceId: args.workspaceId,
@@ -115,7 +172,25 @@ export const addMember = zMutation({
       role: args.role,
       joinedAt: Date.now(),
     });
-    return user._id;
+    return { status: "added" as const };
+  },
+});
+
+export const listInvites = zQuery({
+  args: { workspaceId: workspaceIdSchema },
+  handler: async (ctx, args) => {
+    const { membership } = await requireWorkspaceMember(ctx, args.workspaceId);
+    assertCanManage(membership);
+    const invites = await ctx.db
+      .query("invites")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(100);
+    return invites.map((invite) => ({
+      _id: invite._id,
+      email: invite.email,
+      role: invite.role,
+      createdAt: invite.createdAt,
+    }));
   },
 });
 
@@ -123,6 +198,7 @@ export const ensureWorkspace = zMutation({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUser(ctx);
+    await claimInvites(ctx, userId);
     const existing = await ctx.db
       .query("members")
       .withIndex("by_user", (q) => q.eq("userId", userId))

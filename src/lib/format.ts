@@ -1,8 +1,17 @@
 import { addDays, format, formatDistanceToNowStrict, startOfDay } from "date-fns";
 
 export function errorMessage(error: unknown) {
+  if (error && typeof error === "object" && "data" in error) {
+    const data = (error as { data?: unknown }).data;
+    if (typeof data === "string" && data.length > 0) return data;
+  }
   if (error instanceof Error) {
-    return error.message.replace(/^Uncaught Error:\s*/, "");
+    return error.message
+      .replace(/^\[CONVEX[^\]]*\]\s*/g, "")
+      .replace(/^Uncaught ConvexError:\s*/i, "")
+      .replace(/^Uncaught Error:\s*/, "")
+      .replace(/\s*Called by client\s*$/, "")
+      .trim();
   }
   return "Something went wrong";
 }
