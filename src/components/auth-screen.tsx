@@ -16,7 +16,13 @@ const credentialsSchema = z.object({
   name: z.string().trim().min(1, "Enter your name").optional(),
 });
 
-export default function AuthScreen({ mode }: { mode: "signIn" | "signUp" }) {
+export default function AuthScreen({
+  mode,
+  passwordEnabled = true,
+}: {
+  mode: "signIn" | "signUp";
+  passwordEnabled?: boolean;
+}) {
   const { signIn } = useAuthActions();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -77,10 +83,13 @@ export default function AuthScreen({ mode }: { mode: "signIn" | "signUp" }) {
           {mode === "signIn" ? "Welcome back" : "Create your workspace"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {mode === "signIn"
-            ? "Sign in to track issues with your team."
-            : "Start with email. A workspace is created for you."}
+          {passwordEnabled
+            ? mode === "signIn"
+              ? "Sign in to track issues with your team."
+              : "Start with email. A workspace is created for you."
+            : "Sign in with Google to track issues with your team."}
         </p>
+        {passwordEnabled ? (
         <form onSubmit={onSubmit} className="mt-6 space-y-3">
           {mode === "signUp" ? (
             <div className="space-y-1.5">
@@ -121,15 +130,17 @@ export default function AuthScreen({ mode }: { mode: "signIn" | "signUp" }) {
             {mode === "signIn" ? "Sign in" : "Create account"}
           </Button>
         </form>
+        ) : null}
         <Button
           type="button"
           variant="outline"
-          className="mt-2 h-10 w-full"
+          className={passwordEnabled ? "mt-2 h-10 w-full" : "mt-6 h-10 w-full"}
           disabled={pending}
           onClick={() => void onGoogle()}
         >
           Continue with Google
         </Button>
+        {passwordEnabled ? (
         <p className="mt-6 text-sm text-muted-foreground">
           {mode === "signIn" ? "New here?" : "Already have an account?"}{" "}
           <a
@@ -139,6 +150,7 @@ export default function AuthScreen({ mode }: { mode: "signIn" | "signUp" }) {
             {mode === "signIn" ? "Create an account" : "Sign in"}
           </a>
         </p>
+        ) : null}
       </div>
     </main>
   );

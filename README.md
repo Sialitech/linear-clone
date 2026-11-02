@@ -72,7 +72,7 @@ https://<your-deployment>.convex.site/github/oauth/callback
 ## Deploy on Vercel
 
 1. Create a project on [Vercel](https://vercel.com) and link this repository.
-2. The build command is `npx convex deploy --cmd 'npm run build'` (`vercel.json` and the `vercel-build` script). It deploys Convex, then builds Next.js.
+2. The build command is `npx convex deploy --cmd 'npm run build' && npm run convex:postdeploy` (`vercel.json` and the `vercel-build` script). It deploys Convex, builds Next.js, then sets preview `SITE_URL` or production `AUTH_PASSWORD_DISABLED`.
 3. In the [Convex dashboard](https://dashboard.convex.dev), open the production deployment → Settings → Deploy keys. Create a key with the `deployment:deploy` permission.
 4. In Vercel, add `CONVEX_DEPLOY_KEY` as an environment variable **only for Production**.
 5. Run one production deploy so Convex creates the production deployment. Copy its cloud URL (ends in `.convex.cloud`).
@@ -81,5 +81,6 @@ https://<your-deployment>.convex.site/github/oauth/callback
    - `SITE_URL` to the Vercel production URL (for example `https://your-app.vercel.app`)
    - `JWT_PRIVATE_KEY` and `JWKS` (generate them with `npx @convex-dev/auth`, choosing the production deployment)
    - `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` if you want Google sign-in
+   - `AUTH_PASSWORD_DISABLED=true` to turn off email and password sign-in (the production Vercel build sets this automatically)
 
 Preview deployments need `CONVEX_DEPLOY_KEY` as well if you want them to build. The instructions above keep that key on Production only.
