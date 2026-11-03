@@ -1,5 +1,5 @@
 import type { Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { z } from "zod";
 import { loadPublicUser, requireIssueAccess, type ReadCtx } from "./lib/access";
 import { recordActivity } from "./lib/activity";
@@ -70,13 +70,11 @@ async function writeMentions(
   }
 }
 
-export const list = zQuery({
-  args: { issueId: issueIdSchema },
-  handler: async (ctx, args) => {
-    await requireIssueAccess(ctx, args.issueId);
+export async function listComments(ctx: QueryCtx, issueId: Id<"issues">) {
+    await requireIssueAccess(ctx, issueId);
     const comments = await ctx.db
       .query("comments")
-      .withIndex("by_issue", (q) => q.eq("issueId", args.issueId))
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .take(200);
     const ordered = [...comments].sort((a, b) => a.createdAt - b.createdAt);
     const result = [];
@@ -92,16 +90,17 @@ export const list = zQuery({
       });
     }
     return result;
-  },
+}
+
+export const list = zQuery({
+  args: { issueId: issueIdSchema },
+  handler: async (ctx, args) => listComments(ctx, args.issueId),
 });
 
-export const create = zMutation({
-  args: {
-    issueId: issueIdSchema,
-    content: z.string().trim().min(1).max(10000),
-    mentionIds: mentionIdsSchema.optional(),
-  },
-  handler: async (ctx, args) => {
+export async function createComment(
+  ctx: MutationCtx,
+  args: { issueId: Id<"issues">; content: string; mentionIds?: Id<"users">[] },
+) {
     const { userId, issue } = await requireIssueAccess(ctx, args.issueId);
     const mentionIds = await assertMentionMembers(
       ctx,
@@ -132,16 +131,21 @@ export const create = zMutation({
       type: "comment_added",
     });
     return commentId;
-  },
-});
+}
 
-export const update = zMutation({
+export const create = zMutation({
   args: {
-    commentId: commentIdSchema,
+    issueId: issueIdSchema,
     content: z.string().trim().min(1).max(10000),
     mentionIds: mentionIdsSchema.optional(),
   },
-  handler: async (ctx, args) => {
+  handler: createComment,
+});
+
+export async function updateComment(
+  ctx: MutationCtx,
+  args: { commentId: Id<"comments">; content: string; mentionIds?: Id<"users">[] },
+) {
     const comment = await ctx.db.get("comments", args.commentId);
     if (!comment) throw new Error("Comment not found");
     const { userId, issue } = await requireIssueAccess(ctx, comment.issueId);
@@ -184,13 +188,19 @@ export const update = zMutation({
       });
     }
     return comment._id;
+}
+
+export const update = zMutation({
+  args: {
+    commentId: commentIdSchema,
+    content: z.string().trim().min(1).max(10000),
+    mentionIds: mentionIdsSchema.optional(),
   },
+  handler: updateComment,
 });
 
-export const remove = zMutation({
-  args: { commentId: commentIdSchema },
-  handler: async (ctx, args) => {
-    const comment = await ctx.db.get("comments", args.commentId);
+export async function removeComment(ctx: MutationCtx, commentId: Id<"comments">) {
+    const comment = await ctx.db.get("comments", commentId);
     if (!comment) throw new Error("Comment not found");
     const { issue, userId, membership } = await requireIssueAccess(ctx, comment.issueId);
     const canModerate = membership.role === "owner" || membership.role === "admin";
@@ -206,5 +216,9 @@ export const remove = zMutation({
       type: "comment_deleted",
     });
     return comment._id;
-  },
+}
+
+export const remove = zMutation({
+  args: { commentId: commentIdSchema },
+  handler: async (ctx, args) => removeComment(ctx, args.commentId),
 });
