@@ -69,6 +69,18 @@ A personal OAuth connection remains a fallback for pull request refresh when the
 https://<your-deployment>.convex.site/github/oauth/callback
 ```
 
+## MCP server
+
+The Convex HTTP route `POST /mcp` is a remote MCP server, in the same style as Linear's. It uses stateless JSON-RPC (`initialize`, `tools/list`, `tools/call`) and a personal API token.
+
+1. Open **Settings → MCP** and create a token. The plaintext token is shown once.
+2. Point the client at `https://<deployment>.convex.site/mcp`.
+3. Send `Authorization: Bearer lin_…` on every request.
+
+Tools: `whoami`, `list_projects`, `list_users`, `list_labels`, `list_cycles`, `list_issue_statuses`, `list_issues`, `get_issue`, `save_issue`, `list_comments`, `save_comment`, `delete_comment`.
+
+A token acts as the member who created it, inside that workspace. Issue ids accept Convex ids or identifiers such as `ENG-12`. `assignee` accepts a user id or `me`.
+
 ## Deploy on Vercel
 
 1. Create a project on [Vercel](https://vercel.com) and link this repository.

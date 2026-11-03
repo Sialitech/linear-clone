@@ -9,6 +9,7 @@
  */
 
 import type * as activities from "../activities.js";
+import type * as apiTokens from "../apiTokens.js";
 import type * as auth from "../auth.js";
 import type * as comments from "../comments.js";
 import type * as cycles from "../cycles.js";
@@ -17,6 +18,7 @@ import type * as githubNode from "../githubNode.js";
 import type * as http from "../http.js";
 import type * as issues from "../issues.js";
 import type * as labels from "../labels.js";
+import type * as mcp from "../mcp.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_activity from "../lib/activity.js";
 import type * as lib_functions from "../lib/functions.js";
@@ -34,6 +36,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activities: typeof activities;
+  apiTokens: typeof apiTokens;
   auth: typeof auth;
   comments: typeof comments;
   cycles: typeof cycles;
@@ -42,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   issues: typeof issues;
   labels: typeof labels;
+  mcp: typeof mcp;
   "lib/access": typeof lib_access;
   "lib/activity": typeof lib_activity;
   "lib/functions": typeof lib_functions;

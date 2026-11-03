@@ -276,6 +276,17 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_workspace", ["workspaceId"]),
+  apiTokens: defineTable({
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    name: v.string(),
+    tokenHash: v.string(),
+    tokenPrefix: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_hash", ["tokenHash"])
+    .index("by_workspace_and_user", ["workspaceId", "userId"]),
   pullRequests: defineTable({
     workspaceId: v.id("workspaces"),
     issueId: v.id("issues"),

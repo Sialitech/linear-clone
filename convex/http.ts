@@ -1,7 +1,9 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { hashApiToken } from "./apiTokens";
 import { auth } from "./auth";
+import { handleMcpMessage, parseRpcMessages, toolResult } from "./mcpProtocol";
 import { createGithubAppFromManifest, exchangeGithubCode } from "./github";
 import {
   clearOAuthStateCookie,
@@ -224,6 +226,86 @@ http.route({
   path: "/github/webhook",
   method: "POST",
   handler: httpAction(async () => new Response(null, { status: 200 })),
+});
+
+const MCP_CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type, mcp-protocol-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function mcpResponse(body: unknown, status = 200) {
+  return new Response(body === null ? null : JSON.stringify(body), {
+    status,
+    headers: {
+      ...MCP_CORS,
+      ...(body === null ? {} : { "Content-Type": "application/json" }),
+    },
+  });
+}
+
+async function handleMcp(
+  ctx: { runMutation: Function; runQuery: Function },
+  request: Request,
+) {
+  const header = request.headers.get("authorization") ?? "";
+  const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
+  if (!token) {
+    return mcpResponse({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Unauthorized" } }, 401);
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return mcpResponse({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, 400);
+  }
+  const messages = parseRpcMessages(body);
+  if ("error" in messages) {
+    return mcpResponse({ jsonrpc: "2.0", id: null, error: { code: -32600, message: messages.error } }, 400);
+  }
+  const tokenHash = await hashApiToken(token);
+  const allowed = await ctx.runQuery(internal.mcp.authenticate, { tokenHash });
+  if (!allowed) {
+    return mcpResponse({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Unauthorized" } }, 401);
+  }
+  const responses = [];
+  for (const message of messages) {
+    const outcome = await handleMcpMessage(message, async (name, toolArgs) => {
+      try {
+        return await ctx.runMutation(internal.mcp.dispatch, {
+          tokenHash,
+          name,
+          arguments: toolArgs,
+        });
+      } catch (error) {
+        const messageText = error instanceof Error ? error.message : "Tool failed";
+        if (messageText === "Unauthorized") throw new Error("Unauthorized");
+        return toolResult(messageText, true);
+      }
+    });
+    if (outcome.kind !== "notification") responses.push(outcome.body);
+  }
+  if (responses.length === 0) return mcpResponse(null, 202);
+  const unauthorized = responses.some(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      "error" in item &&
+      (item as { error?: { message?: string } }).error?.message === "Unauthorized",
+  );
+  return mcpResponse(Array.isArray(body) ? responses : responses[0], unauthorized ? 401 : 200);
+}
+
+http.route({
+  path: "/mcp",
+  method: "OPTIONS",
+  handler: httpAction(async () => new Response(null, { status: 204, headers: MCP_CORS })),
+});
+
+http.route({
+  path: "/mcp",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => handleMcp(ctx, request)),
 });
 
 export default http;

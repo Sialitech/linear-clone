@@ -4,7 +4,19 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 export type ReadCtx = QueryCtx | MutationCtx;
 
+// Set only inside the MCP dispatch mutation so existing queries run as the token owner.
+let mcpActorId: Id<"users"> | undefined;
+
+export function setMcpActor(userId: Id<"users"> | undefined) {
+  mcpActorId = userId;
+}
+
 export async function requireUser(ctx: ReadCtx): Promise<Id<"users">> {
+  if (mcpActorId) {
+    const user = await ctx.db.get("users", mcpActorId);
+    if (!user) throw new Error("Not authenticated");
+    return mcpActorId;
+  }
   const userId = await getAuthUserId(ctx);
   if (!userId) {
     throw new Error("Not authenticated");

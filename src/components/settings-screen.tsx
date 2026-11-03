@@ -59,7 +59,14 @@ export default function SettingsScreen() {
   const [role, setRole] = useState<"admin" | "member">("member");
   const [projectId, setProjectId] = useState("");
   const [repoFullName, setRepoFullName] = useState("");
+  const tokens = useQuery(api.apiTokens.list, workspace ? { workspaceId: workspace._id } : "skip");
+  const createToken = useMutation(api.apiTokens.create);
+  const revokeToken = useMutation(api.apiTokens.revoke);
   const [connectingGithub, setConnectingGithub] = useState(false);
+  const [tokenName, setTokenName] = useState("Cursor");
+  const [freshToken, setFreshToken] = useState<string | null>(null);
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL ?? "";
+  const mcpUrl = convexUrl.replace(".convex.cloud", ".convex.site").replace(/\/$/, "") + "/mcp";
 
   useEffect(() => {
     if (me?.name) setName(me.name);
@@ -302,6 +309,76 @@ export default function SettingsScreen() {
           ) : (
             <p className="mt-3 text-xs text-muted-foreground">Only owners and admins can add members.</p>
           )}
+        </section>
+        <section>
+          <h2 className="text-sm font-medium">MCP</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Connect Cursor or another MCP client with a personal token. The server speaks the same kind of tools as Linear: issues, projects, comments, and members.
+          </p>
+          <div className="mt-3 space-y-3 rounded-md border border-border p-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-url">Server URL</Label>
+              <Input id="mcp-url" readOnly value={mcpUrl} className="font-mono text-xs" />
+            </div>
+            <form
+              className="flex flex-col gap-2 sm:flex-row sm:items-center"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!workspace) return;
+                const parsed = z.object({ name: z.string().trim().min(1).max(60) }).safeParse({ name: tokenName });
+                if (!parsed.success) {
+                  toast.error(parsed.error.issues[0]?.message ?? "Enter a token name");
+                  return;
+                }
+                void createToken({ workspaceId: workspace._id, name: parsed.data.name })
+                  .then((created) => {
+                    setFreshToken(created.token);
+                    toast.success("API token created");
+                  })
+                  .catch((error: unknown) => toast.error(errorMessage(error)));
+              }}
+            >
+              <Input
+                value={tokenName}
+                onChange={(event) => setTokenName(event.target.value)}
+                placeholder="Token name"
+                className="h-9 sm:h-8 sm:w-48"
+              />
+              <Button type="submit" size="sm">Create token</Button>
+            </form>
+            {freshToken ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="mcp-token">New token</Label>
+                <Input id="mcp-token" readOnly value={freshToken} className="font-mono text-xs" />
+                <p className="text-xs text-muted-foreground">
+                  Copy it now. Send it as Authorization: Bearer on every request. It is stored only as a hash.
+                </p>
+              </div>
+            ) : null}
+            <ul className="space-y-2 text-sm">
+              {(tokens ?? []).map((token) => (
+                <li key={token._id} className="flex items-center justify-between gap-2">
+                  <span>
+                    {token.name}{" "}
+                    <span className="font-mono text-xs text-muted-foreground">{token.tokenPrefix}…</span>
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (!workspace) return;
+                      void revokeToken({ workspaceId: workspace._id, tokenId: token._id })
+                        .then(() => toast.success("Token revoked"))
+                        .catch((error: unknown) => toast.error(errorMessage(error)));
+                    }}
+                  >
+                    Revoke
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
         <section>
           <h2 className="text-sm font-medium">GitHub</h2>

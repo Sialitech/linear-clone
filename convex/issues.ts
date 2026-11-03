@@ -240,19 +240,32 @@ function matchesFilters(
   return true;
 }
 
-export const list = zQuery({
+const listIssueArgs = {
+  workspaceId: workspaceIdSchema,
+  projectId: projectIdSchema.optional(),
+  status: issueStatusSchema.optional(),
+  priority: prioritySchema.optional(),
+  assigneeId: userIdSchema.optional(),
+  labelId: labelIdSchema.optional(),
+  cycleId: cycleIdSchema.optional(),
+  search: z.string().trim().max(200).optional(),
+  unassigned: z.boolean().optional(),
+};
+
+export async function listIssues(
+  ctx: QueryCtx,
   args: {
-    workspaceId: workspaceIdSchema,
-    projectId: projectIdSchema.optional(),
-    status: issueStatusSchema.optional(),
-    priority: prioritySchema.optional(),
-    assigneeId: userIdSchema.optional(),
-    labelId: labelIdSchema.optional(),
-    cycleId: cycleIdSchema.optional(),
-    search: z.string().trim().max(200).optional(),
-    unassigned: z.boolean().optional(),
+    workspaceId: Id<"workspaces">;
+    projectId?: Id<"projects">;
+    status?: Doc<"issues">["status"];
+    priority?: Doc<"issues">["priority"];
+    assigneeId?: Id<"users">;
+    labelId?: Id<"labels">;
+    cycleId?: Id<"cycles">;
+    search?: string;
+    unassigned?: boolean;
   },
-  handler: async (ctx, args) => {
+) {
     await requireWorkspaceMember(ctx, args.workspaceId);
     const search = args.search?.trim();
     let issues: Doc<"issues">[];
@@ -310,7 +323,11 @@ export const list = zQuery({
 
     const filtered = issues.filter((issue) => matchesFilters(issue, args));
     return await enrichIssues(ctx, filtered);
-  },
+}
+
+export const list = zQuery({
+  args: listIssueArgs,
+  handler: listIssues,
 });
 
 export const inbox = zQuery({
@@ -364,15 +381,17 @@ export const mentions = zQuery({
   },
 });
 
+export async function getIssue(ctx: QueryCtx, issueId: Id<"issues">) {
+  const issue = await ctx.db.get("issues", issueId);
+  if (!issue) return null;
+  await requireWorkspaceMember(ctx, issue.workspaceId);
+  const [enriched] = await enrichIssues(ctx, [issue]);
+  return enriched ?? null;
+}
+
 export const get = zQuery({
   args: { issueId: issueIdSchema },
-  handler: async (ctx, args) => {
-    const issue = await ctx.db.get("issues", args.issueId);
-    if (!issue) return null;
-    await requireWorkspaceMember(ctx, issue.workspaceId);
-    const [enriched] = await enrichIssues(ctx, [issue]);
-    return enriched ?? null;
-  },
+  handler: async (ctx, args) => getIssue(ctx, args.issueId),
 });
 
 export const children = zQuery({
@@ -390,20 +409,21 @@ export const children = zQuery({
   },
 });
 
-export const create = zMutation({
+export async function createIssue(
+  ctx: import("./_generated/server").MutationCtx,
   args: {
-    projectId: projectIdSchema,
-    title: z.string().trim().min(1).max(180),
-    description: z.string().max(20000).optional(),
-    status: issueStatusSchema.optional(),
-    priority: prioritySchema.optional(),
-    assigneeId: userIdSchema.nullable().optional(),
-    labelIds: labelIdsSchema.optional(),
-    dueDate: z.number().finite().nullable().optional(),
-    cycleId: cycleIdSchema.nullable().optional(),
-    parentId: issueIdSchema.nullable().optional(),
+    projectId: Id<"projects">;
+    title: string;
+    description?: string;
+    status?: Doc<"issues">["status"];
+    priority?: Doc<"issues">["priority"];
+    assigneeId?: Id<"users"> | null;
+    labelIds?: Id<"labels">[];
+    dueDate?: number | null;
+    cycleId?: Id<"cycles"> | null;
+    parentId?: Id<"issues"> | null;
   },
-  handler: async (ctx, args) => {
+) {
     const { project, userId } = await requireProjectAccess(ctx, args.projectId);
     const assigneeId = args.assigneeId ?? undefined;
     await assertAssignee(ctx, project.workspaceId, assigneeId);
@@ -467,7 +487,22 @@ export const create = zMutation({
       });
     }
     return issueId;
+}
+
+export const create = zMutation({
+  args: {
+    projectId: projectIdSchema,
+    title: z.string().trim().min(1).max(180),
+    description: z.string().max(20000).optional(),
+    status: issueStatusSchema.optional(),
+    priority: prioritySchema.optional(),
+    assigneeId: userIdSchema.nullable().optional(),
+    labelIds: labelIdsSchema.optional(),
+    dueDate: z.number().finite().nullable().optional(),
+    cycleId: cycleIdSchema.nullable().optional(),
+    parentId: issueIdSchema.nullable().optional(),
   },
+  handler: createIssue,
 });
 
 export const setParent = zMutation({
@@ -527,21 +562,22 @@ export const setParent = zMutation({
   },
 });
 
-export const update = zMutation({
+export async function updateIssue(
+  ctx: import("./_generated/server").MutationCtx,
   args: {
-    issueId: issueIdSchema,
-    title: z.string().trim().min(1).max(180).optional(),
-    description: z.string().max(20000).optional(),
-    status: issueStatusSchema.optional(),
-    priority: prioritySchema.optional(),
-    assigneeId: userIdSchema.nullable().optional(),
-    labelIds: labelIdsSchema.optional(),
-    dueDate: z.number().finite().nullable().optional(),
-    cycleId: cycleIdSchema.nullable().optional(),
-    projectId: projectIdSchema.optional(),
-    order: z.number().finite().optional(),
+    issueId: Id<"issues">;
+    title?: string;
+    description?: string;
+    status?: Doc<"issues">["status"];
+    priority?: Doc<"issues">["priority"];
+    assigneeId?: Id<"users"> | null;
+    labelIds?: Id<"labels">[];
+    dueDate?: number | null;
+    cycleId?: Id<"cycles"> | null;
+    projectId?: Id<"projects">;
+    order?: number;
   },
-  handler: async (ctx, args) => {
+) {
     const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
     let projectId = issue.projectId;
     let workspaceId = issue.workspaceId;
@@ -706,7 +742,23 @@ export const update = zMutation({
       ...(args.cycleId !== undefined ? { cycleId: args.cycleId ?? undefined } : {}),
     });
     return issue._id;
+}
+
+export const update = zMutation({
+  args: {
+    issueId: issueIdSchema,
+    title: z.string().trim().min(1).max(180).optional(),
+    description: z.string().max(20000).optional(),
+    status: issueStatusSchema.optional(),
+    priority: prioritySchema.optional(),
+    assigneeId: userIdSchema.nullable().optional(),
+    labelIds: labelIdsSchema.optional(),
+    dueDate: z.number().finite().nullable().optional(),
+    cycleId: cycleIdSchema.nullable().optional(),
+    projectId: projectIdSchema.optional(),
+    order: z.number().finite().optional(),
   },
+  handler: updateIssue,
 });
 
 export const move = zMutation({
