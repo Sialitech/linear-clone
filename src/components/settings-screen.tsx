@@ -65,8 +65,11 @@ export default function SettingsScreen() {
   const [connectingGithub, setConnectingGithub] = useState(false);
   const [tokenName, setTokenName] = useState("Cursor");
   const [freshToken, setFreshToken] = useState<string | null>(null);
-  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL ?? "";
-  const mcpUrl = convexUrl.replace(".convex.cloud", ".convex.site").replace(/\/$/, "") + "/mcp";
+  const [mcpUrl, setMcpUrl] = useState("");
+
+  useEffect(() => {
+    setMcpUrl(`${window.location.origin}/mcp`);
+  }, []);
 
   useEffect(() => {
     if (me?.name) setName(me.name);

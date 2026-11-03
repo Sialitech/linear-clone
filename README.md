@@ -71,10 +71,10 @@ https://<your-deployment>.convex.site/github/oauth/callback
 
 ## MCP server
 
-The Convex HTTP route `POST /mcp` is a remote MCP server, in the same style as Linear's. It uses stateless JSON-RPC (`initialize`, `tools/list`, `tools/call`) and a personal API token.
+`POST /mcp` on the app host is the remote MCP server, in the same style as Linear's. Production is `https://linear.sialitech.com/mcp`. The Next.js route forwards the request to Convex. It uses stateless JSON-RPC (`initialize`, `tools/list`, `tools/call`) and a personal API token.
 
 1. Open **Settings → MCP** and create a token. The plaintext token is shown once.
-2. Point the client at `https://<deployment>.convex.site/mcp`.
+2. Point the client at `https://linear.sialitech.com/mcp` (or the origin shown in Settings).
 3. Send `Authorization: Bearer lin_…` on every request.
 
 Tools: `whoami`, `list_projects`, `list_users`, `list_labels`, `list_cycles`, `list_issue_statuses`, `list_issues`, `get_issue`, `save_issue`, `list_comments`, `save_comment`, `delete_comment`.
