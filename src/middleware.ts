@@ -7,6 +7,7 @@ import {
 const isAuthPage = createRouteMatcher(["/login", "/signup"]);
 
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
+  if (request.nextUrl.pathname === "/mcp") return;
   const authenticated = await convexAuth.isAuthenticated();
   if (isAuthPage(request) && authenticated) {
     return nextjsMiddlewareRedirect(request, "/");
