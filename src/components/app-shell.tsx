@@ -73,7 +73,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             type="button"
             aria-label="Open menu"
             aria-expanded={navOpen}
-            className="inline-flex size-11 items-center justify-center rounded-md text-foreground hover:bg-white/5"
+            className="inline-flex size-11 items-center justify-center rounded-md text-foreground hover:bg-accent"
             onClick={() => setNavOpen(true)}
           >
             <Menu className="size-4" />
@@ -84,7 +84,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             aria-label="New issue"
-            className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-white/5 hover:text-foreground"
+            className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             onClick={() => openCreate()}
           >
             <SquarePen className="size-4" />

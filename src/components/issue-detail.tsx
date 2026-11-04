@@ -155,13 +155,13 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     return (
       <div className="flex h-full min-h-0 flex-col" aria-busy="true" aria-label="Loading issue">
         <header className="flex min-h-12 items-center border-b border-border px-3 sm:px-4">
-          <span className="h-3.5 w-24 animate-pulse rounded-md bg-white/8" />
+          <span className="h-3.5 w-24 animate-pulse rounded-md bg-muted" />
         </header>
         <div className="mx-auto w-full max-w-3xl space-y-3 p-6">
-          <div className="h-6 w-2/3 animate-pulse rounded-md bg-white/8" />
-          <div className="h-3 w-full animate-pulse rounded-md bg-white/8" />
-          <div className="h-3 w-5/6 animate-pulse rounded-md bg-white/8" />
-          <div className="h-3 w-3/5 animate-pulse rounded-md bg-white/8" />
+          <div className="h-6 w-2/3 animate-pulse rounded-md bg-muted" />
+          <div className="h-3 w-full animate-pulse rounded-md bg-muted" />
+          <div className="h-3 w-5/6 animate-pulse rounded-md bg-muted" />
+          <div className="h-3 w-3/5 animate-pulse rounded-md bg-muted" />
         </div>
       </div>
     );
@@ -201,7 +201,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto pb-[env(safe-area-inset-bottom)] lg:grid-cols-[minmax(0,1fr)_280px] lg:overflow-hidden lg:pb-0">
         <div className="px-4 py-4 sm:px-6 sm:py-5 lg:min-h-0 lg:overflow-auto">
           <h1 className="text-xl font-medium tracking-tight">{issue.title}</h1>
-          <div className="prose-invert mt-4 text-sm leading-6 text-foreground/90 [&_code]:rounded [&_code]:bg-white/8 [&_code]:px-1 [&_h1]:mb-2 [&_h1]:text-lg [&_h2]:mb-2 [&_h2]:text-base [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
+          <div className="prose-invert mt-4 text-sm leading-6 text-foreground/90 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_h1]:mb-2 [&_h1]:text-lg [&_h2]:mb-2 [&_h2]:text-base [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
             {issue.description ? (
               <ReactMarkdown>{issue.description}</ReactMarkdown>
             ) : (
@@ -525,8 +525,8 @@ function SubIssues({
       <ul className="divide-y divide-border rounded-md border border-border">
         {children === undefined ? (
           <li className="flex items-center gap-2 px-3 py-2" aria-busy="true" aria-label="Loading sub-issues">
-            <span className="size-3.5 animate-pulse rounded-full bg-white/8" />
-            <span className="h-3 w-40 animate-pulse rounded-md bg-white/8" />
+            <span className="size-3.5 animate-pulse rounded-full bg-muted" />
+            <span className="h-3 w-40 animate-pulse rounded-md bg-muted" />
           </li>
         ) : null}
         {children?.map((child) => (
@@ -625,7 +625,7 @@ function ParentField({
                 <li key={candidate._id}>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-white/5"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-accent"
                     onClick={() => void choose(candidate._id)}
                   >
                     <span className="shrink-0 font-mono text-muted-foreground">{candidate.identifier}</span>
@@ -671,7 +671,7 @@ function CommentBody({
         segment.type === "mention" ? (
           <span
             key={`${segment.userId}-${index}`}
-            className="rounded-sm bg-white/10 px-0.5 text-foreground"
+            className="rounded-sm bg-muted px-0.5 text-foreground"
           >
             {segment.value}
           </span>

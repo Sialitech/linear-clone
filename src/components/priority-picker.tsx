@@ -79,7 +79,7 @@ export default function PriorityPicker({
               aria-label={`Change priority, current ${priorityLabel(priority)}`}
               aria-haspopup="menu"
               className={cn(
-                "inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-foreground hover:bg-white/10",
+                "inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-foreground hover:bg-accent",
                 className,
               )}
               onDragStart={(event) => {

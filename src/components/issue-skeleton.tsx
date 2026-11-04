@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 const TITLE_WIDTHS = ["42%", "68%", "54%", "76%", "48%", "61%", "36%", "72%"];
 
 function Bar({ className, style }: { className?: string; style?: { width: string } }) {
-  return <div className={cn("animate-pulse rounded-md bg-white/8", className)} style={style} />;
+  return <div className={cn("animate-pulse rounded-md bg-muted", className)} style={style} />;
 }
 
 export default function IssueSkeleton({ variant = "list" }: { variant?: "list" | "board" }) {
@@ -17,7 +17,7 @@ export default function IssueSkeleton({ variant = "list" }: { variant?: "list" |
         {Array.from({ length: 5 }, (_, column) => (
           <section
             key={column}
-            className="flex h-full w-[min(78vw,272px)] shrink-0 flex-col rounded-lg bg-white/[0.02] md:w-[272px]"
+            className="flex h-full w-[min(78vw,272px)] shrink-0 flex-col rounded-lg bg-muted/40 md:w-[272px]"
           >
             <header className="flex items-center gap-2 px-2 py-2">
               <Bar className="size-3.5 rounded-full" />

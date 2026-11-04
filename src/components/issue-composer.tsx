@@ -356,7 +356,7 @@ export default function IssueComposer() {
                       <button
                         key={label._id}
                         type="button"
-                        className="flex items-center justify-between rounded-md px-1 py-1 text-left hover:bg-white/5"
+                        className="flex items-center justify-between rounded-md px-1 py-1 text-left hover:bg-accent"
                         onClick={() =>
                           setDraft((current) => ({
                             ...current,

@@ -25,12 +25,12 @@ export default function ProjectsScreen() {
           ? Array.from({ length: 6 }, (_, index) => (
               <div key={index} className="rounded-lg border border-border px-4 py-3" aria-hidden>
                 <div className="flex items-center gap-2">
-                  <span className="size-2.5 animate-pulse rounded-sm bg-white/8" />
-                  <span className="h-3.5 w-32 animate-pulse rounded-md bg-white/8" />
-                  <span className="ml-auto h-3 w-10 animate-pulse rounded-md bg-white/8" />
+                  <span className="size-2.5 animate-pulse rounded-sm bg-muted" />
+                  <span className="h-3.5 w-32 animate-pulse rounded-md bg-muted" />
+                  <span className="ml-auto h-3 w-10 animate-pulse rounded-md bg-muted" />
                 </div>
-                <span className="mt-3 block h-3 w-4/5 animate-pulse rounded-md bg-white/8" />
-                <span className="mt-3 block h-2.5 w-16 animate-pulse rounded-md bg-white/8" />
+                <span className="mt-3 block h-3 w-4/5 animate-pulse rounded-md bg-muted" />
+                <span className="mt-3 block h-2.5 w-16 animate-pulse rounded-md bg-muted" />
               </div>
             ))
           : null}
@@ -38,7 +38,7 @@ export default function ProjectsScreen() {
           <Link
             key={project._id}
             href={`/projects/${project._id}`}
-            className="rounded-lg border border-border px-4 py-3 hover:bg-white/[0.03]"
+            className="rounded-lg border border-border px-4 py-3 hover:bg-accent"
           >
             <div className="flex items-center gap-2">
               <span className="size-2.5 rounded-sm" style={{ backgroundColor: projectColor(project.key) }} />

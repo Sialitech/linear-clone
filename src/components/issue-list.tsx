@@ -176,7 +176,7 @@ export default function IssueList({
                 type="button"
                 aria-expanded={!isCollapsed}
                 onClick={() => toggleGroup(section.key)}
-                className="flex w-full items-center gap-2 border-b border-border/70 bg-background px-3 py-2 text-left hover:bg-white/[0.03] sm:px-4"
+                className="flex w-full items-center gap-2 border-b border-border/70 bg-background px-3 py-2 text-left hover:bg-accent sm:px-4"
               >
                 <ChevronRight
                   className={cn(
@@ -198,7 +198,7 @@ export default function IssueList({
                       type="button"
                       aria-expanded={!subgroupCollapsed}
                       onClick={() => toggleGroup(subgroup.key)}
-                      className="flex w-full items-center gap-2 border-b border-border/70 bg-background py-1.5 pr-3 pl-8 text-left hover:bg-white/[0.03] sm:pr-4 sm:pl-10"
+                      className="flex w-full items-center gap-2 border-b border-border/70 bg-background py-1.5 pr-3 pl-8 text-left hover:bg-accent sm:pr-4 sm:pl-10"
                     >
                       <ChevronRight
                         className={cn(
@@ -338,7 +338,7 @@ function IssueRows({
       onDrop={onDropIssue}
     >
       <div
-        className="flex items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-white/[0.03] sm:px-4"
+        className="flex items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-accent sm:px-4"
         style={{ paddingLeft: 12 + indent }}
       >
         <IssueCheckbox
