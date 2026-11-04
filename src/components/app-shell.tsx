@@ -1,6 +1,7 @@
 "use client";
 
 import IssueComposer from "@/components/issue-composer";
+import IssuePeek from "@/components/issue-peek";
 import SidebarNav from "@/components/sidebar-nav";
 import WorkspaceProvider, { useWorkspace } from "@/components/workspace-provider";
 import { Menu, SquarePen } from "lucide-react";
@@ -93,6 +94,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
       </div>
       <IssueComposer />
+      <IssuePeek />
     </div>
   );
 }

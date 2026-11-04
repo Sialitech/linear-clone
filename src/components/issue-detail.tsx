@@ -37,10 +37,10 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Copy, ExternalLink, Unlink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+
 
 const commentSchema = z.string().trim().min(1, "Write a comment").max(10000);
 const prUrlSchema = z
@@ -54,10 +54,10 @@ const prUrlSchema = z
 
 type PendingMention = { userId: Id<"users">; token: string };
 
-export default function IssueDetail({ issueId }: { issueId: string }) {
+export default function IssueDetail({ issueId, onClose }: { issueId: string; onClose?: () => void }) {
   const id = issueId as Id<"issues">;
   const router = useRouter();
-  const { workspace, openEdit, me } = useWorkspace();
+  const { workspace, me, openIssue, peekIssueId, closeIssue } = useWorkspace();
   const issue = useQuery(api.issues.get, { issueId: id });
   const comments = useQuery(api.comments.list, issue ? { issueId: id } : "skip");
   const members = useQuery(
@@ -117,7 +117,9 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
     if (!window.confirm("Delete this issue?")) return;
     try {
       await remove({ issueId: id });
-      router.push(issue ? `/projects/${issue.projectId}` : "/");
+      if (onClose) onClose();
+      else if (peekIssueId === id) closeIssue();
+      else router.push(issue ? `/projects/${issue.projectId}` : "/");
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -180,6 +182,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
           <Link
             href={`/issues/${issue.parent._id}`}
             className="shrink-0 font-mono text-xs text-muted-foreground hover:text-foreground"
+            onClick={(event) => openLinkedIssue(event, issue.parent!._id, openIssue)}
           >
             {issue.parent.identifier}
           </Link>
@@ -189,10 +192,7 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
           {issue.identifier}
         </Link>
         <span className="min-w-0 truncate text-xs text-muted-foreground">{issue.projectName}</span>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Button type="button" variant="outline" size="sm" className="h-9 sm:h-7" onClick={() => openEdit(issue._id)}>
-            Edit
-          </Button>
+        <div className="ml-auto flex shrink-0 items-center gap-1 pr-8">
           <Button type="button" variant="ghost" size="sm" className="h-9 sm:h-7" onClick={() => void onDelete()}>
             Delete
           </Button>
@@ -200,14 +200,8 @@ export default function IssueDetail({ issueId }: { issueId: string }) {
       </header>
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto pb-[env(safe-area-inset-bottom)] lg:grid-cols-[minmax(0,1fr)_280px] lg:overflow-hidden lg:pb-0">
         <div className="px-4 py-4 sm:px-6 sm:py-5 lg:min-h-0 lg:overflow-auto">
-          <h1 className="text-xl font-medium tracking-tight">{issue.title}</h1>
-          <div className="prose-invert mt-4 text-sm leading-6 text-foreground/90 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_h1]:mb-2 [&_h1]:text-lg [&_h2]:mb-2 [&_h2]:text-base [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
-            {issue.description ? (
-              <ReactMarkdown>{issue.description}</ReactMarkdown>
-            ) : (
-              <p className="text-muted-foreground">No description yet.</p>
-            )}
-          </div>
+          <InlineTitle issueId={id} title={issue.title} />
+          <InlineDescription issueId={id} description={issue.description ?? ""} />
           <SubIssues issueId={id} projectId={issue.projectId} />
           <IssueActivity issueId={id} />
           <section className="mt-10">
@@ -497,6 +491,7 @@ function SubIssues({
   issueId: Id<"issues">;
   projectId: Id<"projects">;
 }) {
+  const { openIssue } = useWorkspace();
   const children = useQuery(api.issues.children, { issueId });
   const create = useMutation(api.issues.create);
   const update = useMutation(api.issues.update);
@@ -544,10 +539,18 @@ function SubIssues({
             >
               <StatusIcon status={child.status} />
             </button>
-            <Link href={`/issues/${child._id}`} className="shrink-0 font-mono text-xs text-muted-foreground">
+            <Link
+              href={`/issues/${child._id}`}
+              className="shrink-0 font-mono text-xs text-muted-foreground"
+              onClick={(event) => openLinkedIssue(event, child._id, openIssue)}
+            >
               {child.identifier}
             </Link>
-            <Link href={`/issues/${child._id}`} className="min-w-0 flex-1 truncate text-sm">
+            <Link
+              href={`/issues/${child._id}`}
+              className="min-w-0 flex-1 truncate text-sm"
+              onClick={(event) => openLinkedIssue(event, child._id, openIssue)}
+            >
               {child.title}
             </Link>
           </li>
@@ -574,6 +577,7 @@ function ParentField({
   issue: IssueItem;
   workspaceId: Id<"workspaces"> | undefined;
 }) {
+  const { openIssue } = useWorkspace();
   const setParent = useMutation(api.issues.setParent);
   const [query, setQuery] = useState("");
   const search = query.trim();
@@ -599,7 +603,11 @@ function ParentField({
       <div className="space-y-1.5">
         {issue.parent ? (
           <div className="flex items-center gap-1 text-xs">
-            <Link href={`/issues/${issue.parent._id}`} className="min-w-0 flex-1 truncate hover:underline">
+            <Link
+              href={`/issues/${issue.parent._id}`}
+              className="min-w-0 flex-1 truncate hover:underline"
+              onClick={(event) => openLinkedIssue(event, issue.parent!._id, openIssue)}
+            >
               <span className="font-mono text-muted-foreground">{issue.parent.identifier}</span>{" "}
               {issue.parent.title}
             </Link>
@@ -803,5 +811,102 @@ function MentionComposer({
         </ul>
       ) : null}
     </div>
+  );
+}
+
+function openLinkedIssue(
+  event: React.MouseEvent<HTMLAnchorElement>,
+  issueId: Id<"issues">,
+  openIssue: (issueId: Id<"issues">) => void,
+) {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  event.preventDefault();
+  openIssue(issueId);
+}
+
+function InlineTitle({ issueId, title }: { issueId: Id<"issues">; title: string }) {
+  const update = useMutation(api.issues.update);
+  const [value, setValue] = useState(title);
+  const dirty = useRef(false);
+
+  useEffect(() => {
+    if (!dirty.current) setValue(title);
+  }, [title]);
+
+  async function save() {
+    const next = value.trim();
+    if (!next || next === title) {
+      setValue(title);
+      dirty.current = false;
+      return;
+    }
+    try {
+      await update({ issueId, title: next });
+      dirty.current = false;
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  return (
+    <input
+      aria-label="Title"
+      value={value}
+      onChange={(event) => {
+        dirty.current = true;
+        setValue(event.target.value);
+      }}
+      onBlur={() => void save()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+      }}
+      className="w-full bg-transparent text-xl font-medium tracking-tight outline-none"
+    />
+  );
+}
+
+function InlineDescription({
+  issueId,
+  description,
+}: {
+  issueId: Id<"issues">;
+  description: string;
+}) {
+  const update = useMutation(api.issues.update);
+  const [value, setValue] = useState(description);
+  const dirty = useRef(false);
+
+  useEffect(() => {
+    if (!dirty.current) setValue(description);
+  }, [description]);
+
+  async function save() {
+    if (value === description) {
+      dirty.current = false;
+      return;
+    }
+    try {
+      await update({ issueId, description: value });
+      dirty.current = false;
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  return (
+    <textarea
+      aria-label="Description"
+      value={value}
+      placeholder="Add description"
+      onChange={(event) => {
+        dirty.current = true;
+        setValue(event.target.value);
+      }}
+      onBlur={() => void save()}
+      className="mt-3 min-h-28 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-muted-foreground"
+    />
   );
 }
