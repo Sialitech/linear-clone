@@ -104,7 +104,7 @@ export default function SavedViewScreen({ viewId }: { viewId: string }) {
       ) : (
         <>
           <header className="flex min-h-12 items-center border-b border-border px-3 sm:px-4">
-            <span className="inline-block h-3.5 w-36 animate-pulse rounded-md bg-white/8" />
+            <span className="inline-block h-3.5 w-36 animate-pulse rounded-md bg-muted" />
           </header>
           <IssueSkeleton />
         </>

@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import ThemeToggle from "@/components/theme-toggle";
 import UserAvatar from "@/components/user-avatar";
 import { useWorkspace } from "@/components/workspace-provider";
 import { Button } from "@/components/ui/button";
@@ -236,6 +237,11 @@ export default function SettingsScreen() {
         <h1 className="text-sm font-medium">Settings</h1>
       </header>
       <div className="mx-auto max-w-xl space-y-10 px-4 py-6">
+        <section>
+          <h2 className="text-sm font-medium">Appearance</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Choose a light or dark theme. The choice stays on this device.</p>
+          <ThemeToggle className="mt-3" />
+        </section>
         <section>
           <h2 className="text-sm font-medium">Profile</h2>
           <form onSubmit={onProfile} className="mt-3 space-y-3">

@@ -13,7 +13,7 @@ export default function UserAvatar({
   return (
     <Avatar className={cn("size-5", className)}>
       {user?.image ? <AvatarImage src={user.image} alt={label} /> : null}
-      <AvatarFallback className="bg-white/10 text-[9px] font-medium text-foreground">
+      <AvatarFallback className="bg-muted text-[9px] font-medium text-foreground">
         {user ? initials(user.name, user.email) : "–"}
       </AvatarFallback>
     </Avatar>

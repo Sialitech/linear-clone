@@ -102,7 +102,7 @@ export default function ProjectScreen({
                 ) : null}
               </>
             ) : (
-              <span className="inline-block h-3.5 w-32 animate-pulse rounded-md bg-white/8 align-middle" />
+              <span className="inline-block h-3.5 w-32 animate-pulse rounded-md bg-muted align-middle" />
             )}
           </h1>
         </div>
@@ -116,8 +116,8 @@ export default function ProjectScreen({
             href={`/projects/${projectId}`}
             aria-label="List"
             className={cn(
-              "inline-flex h-9 items-center gap-1 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-white/5 sm:h-7",
-              mode === "list" && "bg-white/8 text-foreground",
+              "inline-flex h-9 items-center gap-1 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent sm:h-7",
+              mode === "list" && "bg-muted text-foreground",
             )}
           >
             <List className="size-3.5" />
@@ -127,8 +127,8 @@ export default function ProjectScreen({
             href={`/projects/${projectId}/board`}
             aria-label="Board"
             className={cn(
-              "inline-flex h-9 items-center gap-1 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-white/5 sm:h-7",
-              mode === "board" && "bg-white/8 text-foreground",
+              "inline-flex h-9 items-center gap-1 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent sm:h-7",
+              mode === "board" && "bg-muted text-foreground",
             )}
           >
             <LayoutGrid className="size-3.5" />

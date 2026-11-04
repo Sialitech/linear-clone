@@ -464,7 +464,7 @@ export default function ViewControls({
             {chips.map((chip) => (
               <span
                 key={chip.key}
-                className="inline-flex h-7 max-w-full items-center gap-1 rounded-md border border-border bg-white/[0.03] pr-1 pl-2 text-xs"
+                className="inline-flex h-7 max-w-full items-center gap-1 rounded-md border border-border bg-muted/50 pr-1 pl-2 text-xs"
               >
                 <span className="text-muted-foreground">{chip.field}</span>
                 <span className="truncate text-foreground">{chip.value}</span>
@@ -473,7 +473,7 @@ export default function ViewControls({
                     type="button"
                     aria-label={`Remove ${chip.field} filter`}
                     onClick={() => commit(chip.clear)}
-                    className="rounded p-0.5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
+                    className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
                     <X className="size-3" />
                   </button>
@@ -525,7 +525,7 @@ function DisplayField({
           aria-haspopup="listbox"
           aria-label={label}
           onClick={onToggle}
-          className="inline-flex h-7 w-36 items-center justify-between gap-1 rounded-md bg-white/[0.06] px-2 text-xs hover:bg-white/10"
+          className="inline-flex h-7 w-36 items-center justify-between gap-1 rounded-md bg-muted px-2 text-xs hover:bg-accent"
         >
           <span className="truncate">{valueLabel}</span>
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
@@ -544,8 +544,8 @@ function DisplayField({
                 aria-selected={selected === option.value}
                 onClick={() => onSelect(option.value)}
                 className={cn(
-                  "flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-white/8",
-                  selected === option.value && "bg-white/8",
+                  "flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-muted",
+                  selected === option.value && "bg-muted",
                 )}
               >
                 {option.label}

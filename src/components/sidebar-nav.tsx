@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useTheme } from "@/components/theme-provider";
 import UserAvatar from "@/components/user-avatar";
 import { errorMessage, projectColor } from "@/lib/format";
 import type { ProjectItem, ViewItem } from "@/lib/types";
@@ -36,6 +37,7 @@ import {
   Plus,
   RefreshCw,
   Settings,
+  SunMoon,
   SquarePen,
   Trash2,
   X,
@@ -47,6 +49,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+  const { theme, setTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
   const { workspace, workspaces, setWorkspaceId, me, openCreate } = useWorkspace();
@@ -93,7 +96,7 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
             render={
               <button
                 type="button"
-                className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-1 text-left text-sm font-medium hover:bg-white/5"
+                className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-1 text-left text-sm font-medium hover:bg-accent"
               />
             }
           >
@@ -112,7 +115,7 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
           <button
             type="button"
             aria-label="Close menu"
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-white/5 hover:text-foreground"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             onClick={onNavigate}
           >
             <X className="size-4" />
@@ -124,7 +127,7 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
         type="button"
         onClick={() => openCreate(projects?.[0] ? { projectId: projects[0]._id } : undefined)}
         className={cn(
-          "mx-3 mb-2 flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+          "mx-3 mb-2 flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground",
           roomy && "min-h-11",
         )}
       >
@@ -159,7 +162,7 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
               aria-label="New project"
               onClick={() => setCreating(true)}
               className={cn(
-                "inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                "inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
                 roomy ? "size-10" : "size-5",
               )}
             >
@@ -187,7 +190,7 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
               aria-label="New view"
               onClick={() => setCreatingView(true)}
               className={cn(
-                "inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                "inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
                 roomy ? "size-10" : "size-5",
               )}
             >
@@ -213,7 +216,7 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
               <button
                 type="button"
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-white/5",
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent",
                   roomy && "min-h-11",
                 )}
               />
@@ -233,6 +236,12 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
             >
               <Settings className="size-3.5" />
               Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            >
+              <SunMoon className="size-3.5" />
+              {theme === "dark" ? "Light theme" : "Dark theme"}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => void logout()}>
               <LogOut className="size-3.5" />
@@ -331,9 +340,9 @@ function ProjectRow({
     <>
       <div
         className={cn(
-          "flex items-center rounded-md text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+          "flex items-center rounded-md text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground",
           roomy && "min-h-11",
-          active && "bg-white/6 text-foreground",
+          active && "bg-accent text-foreground",
         )}
       >
         <Link
@@ -355,7 +364,7 @@ function ProjectRow({
                 type="button"
                 aria-label={`Actions for ${project.name}`}
                 className={cn(
-                  "mr-1 inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                  "mr-1 inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
                   roomy ? "size-10" : "size-6",
                 )}
               />
@@ -494,9 +503,9 @@ function ViewRow({
     <>
       <div
         className={cn(
-          "flex items-center rounded-md text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+          "flex items-center rounded-md text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground",
           roomy && "min-h-11",
-          active && "bg-white/6 text-foreground",
+          active && "bg-accent text-foreground",
         )}
       >
         <Link href={href} onClick={onNavigate} className="min-w-0 flex-1 truncate px-2 py-1.5">
@@ -509,7 +518,7 @@ function ViewRow({
                 type="button"
                 aria-label={`Actions for ${view.name}`}
                 className={cn(
-                  "mr-1 inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                  "mr-1 inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
                   roomy ? "size-10" : "size-6",
                 )}
               />
@@ -598,9 +607,9 @@ function NavLink({
       href={href}
       onClick={onNavigate}
       className={cn(
-        "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-white/5 hover:text-foreground",
+        "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground",
         roomy && "min-h-11",
-        active && "bg-white/6 text-foreground",
+        active && "bg-accent text-foreground",
       )}
     >
       {children}

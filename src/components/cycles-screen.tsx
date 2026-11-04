@@ -141,8 +141,8 @@ export default function CyclesScreen() {
           <div className="space-y-3 p-3 sm:p-4" aria-busy="true" aria-label="Loading cycles">
             {Array.from({ length: 3 }, (_, index) => (
               <div key={index} className="rounded-lg border border-border px-4 py-3">
-                <div className="h-3.5 w-32 animate-pulse rounded-md bg-white/8" />
-                <div className="mt-3 h-3 w-48 animate-pulse rounded-md bg-white/8" />
+                <div className="h-3.5 w-32 animate-pulse rounded-md bg-muted" />
+                <div className="mt-3 h-3 w-48 animate-pulse rounded-md bg-muted" />
               </div>
             ))}
           </div>

@@ -236,8 +236,8 @@ function Column({
   return (
     <section
       className={cn(
-        "flex h-full w-[min(78vw,272px)] shrink-0 snap-start flex-col rounded-lg bg-white/[0.02] md:w-[272px]",
-        isOver && "bg-white/[0.04]",
+        "flex h-full w-[min(78vw,272px)] shrink-0 snap-start flex-col rounded-lg bg-muted/40 md:w-[272px]",
+        isOver && "bg-accent",
       )}
     >
       <header className="flex items-center gap-2 px-2 py-2 text-[13px]">
