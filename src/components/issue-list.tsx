@@ -14,6 +14,7 @@ import { selectionAfterClick, type SelectionState } from "@/lib/issue-selection"
 import { nestIssues } from "@/lib/issue-tree";
 import type { IssueItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/components/workspace-provider";
 import { useMutation } from "convex/react";
 import { Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -310,6 +311,7 @@ function IssueRows({
   onDragOverIssue: (issueId: string | null) => void;
   onDropIssue: (event: DragEvent) => void;
 }) {
+  const { openIssue } = useWorkspace();
   const indent = depth * 20;
 
   function onDragStart(event: DragEvent) {
@@ -365,7 +367,11 @@ function IssueRows({
                 shiftKey: event.shiftKey,
                 toggleKey: event.metaKey || event.ctrlKey,
               });
+              return;
             }
+            if (event.altKey || event.button !== 0) return;
+            event.preventDefault();
+            openIssue(issue._id);
           }}
           className="min-w-0 flex-1 truncate text-foreground"
         >

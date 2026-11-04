@@ -10,6 +10,7 @@ import PriorityIcon from "@/components/priority-icon";
 import SubIssueProgress from "@/components/sub-issue-progress";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
+import { useWorkspace } from "@/components/workspace-provider";
 import { errorMessage } from "@/lib/format";
 import type { IssueItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation } from "convex/react";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -105,7 +105,7 @@ export default function KanbanBoard({
   workspaceId: Id<"workspaces">;
   projectId: Id<"projects">;
 }) {
-  const router = useRouter();
+  const { openIssue } = useWorkspace();
   const [columns, setColumns] = useState<Columns>(() => groupIssues([]));
   const columnsRef = useRef(columns);
   const dragging = useRef(false);
@@ -212,7 +212,7 @@ export default function KanbanBoard({
             key={status}
             status={status}
             issues={columns[status]}
-            onOpen={(issueId) => router.push(`/issues/${issueId}`)}
+            onOpen={openIssue}
           />
         ))}
       </div>

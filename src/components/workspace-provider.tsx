@@ -35,6 +35,9 @@ type WorkspaceContextValue = {
   openCreate: (defaults?: { projectId?: Id<"projects">; relation?: IssueRelation }) => void;
   openEdit: (issueId: Id<"issues">) => void;
   closeComposer: () => void;
+  peekIssueId: Id<"issues"> | null;
+  openIssue: (issueId: Id<"issues">) => void;
+  closeIssue: () => void;
 };
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -54,6 +57,7 @@ export default function WorkspaceProvider({ children }: { children: ReactNode })
   const ensuring = useRef(false);
   const [workspaceId, setWorkspaceIdState] = useState<Id<"workspaces"> | null>(null);
   const [composer, setComposer] = useState<ComposerState | null>(null);
+  const [peekIssueId, setPeekIssueId] = useState<Id<"issues"> | null>(null);
 
   useEffect(() => {
     if (!workspaces || workspaces.length > 0 || ensuring.current) return;
@@ -111,8 +115,11 @@ export default function WorkspaceProvider({ children }: { children: ReactNode })
         }),
       openEdit: (issueId) => setComposer({ mode: "edit", issueId }),
       closeComposer: () => setComposer(null),
+      peekIssueId,
+      openIssue: (issueId) => setPeekIssueId(issueId),
+      closeIssue: () => setPeekIssueId(null),
     }),
-    [workspaces, workspace, me, composer],
+    [workspaces, workspace, me, composer, peekIssueId],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
