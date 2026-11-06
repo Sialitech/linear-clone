@@ -270,6 +270,12 @@ export const ensureWorkspace = zMutation({
         assigneeId: userId,
       },
       {
+        title: "Review the incoming bug report",
+        status: "triage" as const,
+        priority: "high" as const,
+        description: "New reports wait in Triage until someone accepts or declines them.",
+      },
+      {
         title: "Write the first comment",
         status: "todo" as const,
         priority: "low" as const,

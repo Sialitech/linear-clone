@@ -322,7 +322,7 @@ export default function SettingsScreen() {
         <section>
           <h2 className="text-sm font-medium">MCP</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Connect Cursor or another MCP client with a personal token. The server speaks the same kind of tools as Linear: issues, projects, comments, and members.
+            Connect Cursor or another MCP client with a personal token. The server speaks the same kind of tools as Linear: issues, triage, projects, comments, and members.
           </p>
           <div className="mt-3 space-y-3 rounded-md border border-border p-3">
             <div className="space-y-1.5">

@@ -8,12 +8,14 @@ import {
   removeComment,
   updateComment,
 } from "./comments";
-import { createIssue, getIssue, listIssues, updateIssue } from "./issues";
+import { createIssue, getIssue, listIssues, listTriage, triageIssue, updateIssue } from "./issues";
 import { setMcpActor } from "./lib/access";
-import { ISSUE_STATUSES } from "./model";
+import { ISSUE_STATUSES, TRIAGE_ACTIONS, WORKFLOW_STATUSES } from "./model";
 import { toolResult } from "./mcpProtocol";
 
 const STATUSES = new Set<string>(ISSUE_STATUSES);
+const WORKFLOW = new Set<string>(WORKFLOW_STATUSES);
+const TRIAGE = new Set<string>(TRIAGE_ACTIONS);
 const PRIORITIES = new Set(["urgent", "high", "medium", "low", "none"]);
 
 function text(value: unknown) {
@@ -84,14 +86,14 @@ async function resolveIssue(
   return issue;
 }
 
-function parseDueDate(value: unknown): number | null | undefined {
+function parseDueDate(value: unknown, field = "dueDate"): number | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error("dueDate must be YYYY-MM-DD or null");
+    throw new Error(`${field} must be YYYY-MM-DD or null`);
   }
   const parsed = Date.parse(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(parsed)) throw new Error("dueDate is not a valid date");
+  if (Number.isNaN(parsed)) throw new Error(`${field} is not a valid date`);
   return parsed;
 }
 
@@ -320,6 +322,53 @@ export const dispatch = internalMutation({
           });
           const updated = await getIssue(ctx, issue._id);
           return toolResult(asJson(updated));
+        }
+        case "list_triage": {
+          const projectRef = text(input.project);
+          const project = projectRef ? await resolveProject(ctx, workspaceId, projectRef) : null;
+          const queue = await listTriage(ctx, {
+            workspaceId,
+            ...(project ? { projectId: project._id } : {}),
+          });
+          const includeSnoozed = input.includeSnoozed === true;
+          const rows = includeSnoozed ? [...queue.waiting, ...queue.snoozed] : queue.waiting;
+          const limit = typeof input.limit === "number" ? Math.min(50, Math.max(1, input.limit)) : 25;
+          return toolResult(
+            asJson({
+              waiting: queue.waiting.length,
+              snoozed: queue.snoozed.length,
+              issues: rows.slice(0, limit).map((issue) => ({
+                id: issue._id,
+                identifier: issue.identifier,
+                title: issue.title,
+                status: issue.status,
+                priority: issue.priority,
+                project: { id: issue.projectId, key: issue.projectKey, name: issue.projectName },
+                snoozedUntil: issue.snoozedUntil,
+                createdAt: issue.createdAt,
+              })),
+            }),
+          );
+        }
+        case "triage_issue": {
+          const action = text(input.action);
+          if (!TRIAGE.has(action)) throw new Error(`Unknown triage action: ${action || "(empty)"}`);
+          const issue = await resolveIssue(ctx, workspaceId, text(input.id));
+          const status = text(input.status);
+          if (status && !WORKFLOW.has(status)) throw new Error(`Unknown status: ${status}`);
+          const snoozedUntil = action === "snooze" ? parseDueDate(input.snoozeUntil, "snoozeUntil") : undefined;
+          if (action === "snooze" && typeof snoozedUntil !== "number") {
+            throw new Error("snoozeUntil must be YYYY-MM-DD");
+          }
+          await triageIssue(ctx, {
+            issueId: issue._id,
+            action: action as (typeof TRIAGE_ACTIONS)[number],
+            ...(status && action === "accept"
+              ? { status: status as (typeof WORKFLOW_STATUSES)[number] }
+              : {}),
+            ...(typeof snoozedUntil === "number" ? { snoozedUntil } : {}),
+          });
+          return toolResult(asJson(await getIssue(ctx, issue._id)));
         }
         case "list_comments": {
           const issue = await resolveIssue(ctx, workspaceId, text(input.issue));

@@ -30,6 +30,7 @@ import {
   zQuery,
 } from "./lib/functions";
 import { toSearchText } from "./lib/keys";
+import { isWorkflowStatus, splitTriage, TRIAGE_ACTIONS, WORKFLOW_STATUSES } from "./model";
 
 const labelIdsSchema = z.array(labelIdSchema).max(12);
 
@@ -183,6 +184,7 @@ async function enrichIssues(ctx: QueryCtx, issues: Doc<"issues">[]) {
       projectId: issue.projectId,
       workspaceId: issue.workspaceId,
       status: issue.status,
+      snoozedUntil: issue.snoozedUntil ?? null,
       priority: issue.priority,
       order: issue.order,
       number: issue.number,
@@ -322,7 +324,11 @@ export async function listIssues(
     }
 
     const filtered = issues.filter((issue) => matchesFilters(issue, args));
-    return await enrichIssues(ctx, filtered);
+    const visible =
+      args.status || search
+        ? filtered
+        : filtered.filter((issue) => isWorkflowStatus(issue.status));
+    return await enrichIssues(ctx, visible);
 }
 
 export const list = zQuery({
@@ -339,11 +345,40 @@ export const inbox = zQuery({
       .withIndex("by_assignee", (q) => q.eq("assigneeId", userId))
       .take(200);
     const open = issues.filter(
-      (issue) => issue.workspaceId === args.workspaceId && issue.status !== "done",
+      (issue) =>
+        issue.workspaceId === args.workspaceId &&
+        isWorkflowStatus(issue.status) &&
+        issue.status !== "done",
     );
     const enriched = await enrichIssues(ctx, open);
     return enriched.sort((a, b) => b.updatedAt - a.updatedAt);
   },
+});
+
+export async function listTriage(
+  ctx: QueryCtx,
+  args: { workspaceId: Id<"workspaces">; projectId?: Id<"projects"> },
+) {
+  await requireWorkspaceMember(ctx, args.workspaceId);
+  const issues = await ctx.db
+    .query("issues")
+    .withIndex("by_workspace_and_status", (q) =>
+      q.eq("workspaceId", args.workspaceId).eq("status", "triage"),
+    )
+    .take(200);
+  const inProject = args.projectId
+    ? issues.filter((issue) => issue.projectId === args.projectId)
+    : issues;
+  const enriched = await enrichIssues(ctx, inProject);
+  return splitTriage(enriched, Date.now());
+}
+
+export const triageQueue = zQuery({
+  args: {
+    workspaceId: workspaceIdSchema,
+    projectId: projectIdSchema.optional(),
+  },
+  handler: listTriage,
 });
 
 export const mentions = zQuery({
@@ -576,6 +611,7 @@ export async function updateIssue(
     cycleId?: Id<"cycles"> | null;
     projectId?: Id<"projects">;
     order?: number;
+    snoozedUntil?: number | null;
   },
 ) {
     const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
@@ -724,6 +760,7 @@ export async function updateIssue(
       }
     }
 
+    const clearSnooze = args.status !== undefined && args.status !== "triage";
     await ctx.db.patch("issues", issue._id, {
       title,
       description,
@@ -732,6 +769,9 @@ export async function updateIssue(
       workspaceId,
       updatedAt: Date.now(),
       ...(args.status !== undefined ? { status: args.status } : {}),
+      ...(clearSnooze || args.snoozedUntil !== undefined
+        ? { snoozedUntil: clearSnooze ? undefined : (args.snoozedUntil ?? undefined) }
+        : {}),
       ...(args.priority !== undefined ? { priority: args.priority } : {}),
       ...(args.labelIds !== undefined ? { labelIds: args.labelIds } : {}),
       ...(args.order !== undefined ? { order: args.order } : {}),
@@ -761,6 +801,56 @@ export const update = zMutation({
   handler: updateIssue,
 });
 
+export async function triageIssue(
+  ctx: import("./_generated/server").MutationCtx,
+  args: {
+    issueId: Id<"issues">;
+    action: (typeof TRIAGE_ACTIONS)[number];
+    status?: (typeof WORKFLOW_STATUSES)[number];
+    snoozedUntil?: number | null;
+  },
+) {
+  const { issue } = await requireIssueAccess(ctx, args.issueId);
+  if (args.action === "send") {
+    await updateIssue(ctx, { issueId: issue._id, status: "triage", snoozedUntil: null });
+    return issue._id;
+  }
+  if (issue.status !== "triage") {
+    throw new Error("Issue is not in triage");
+  }
+  if (args.action === "accept") {
+    const status = args.status ?? "todo";
+    if (!isWorkflowStatus(status)) {
+      throw new Error("Accept moves an issue onto the board");
+    }
+    await updateIssue(ctx, { issueId: issue._id, status, snoozedUntil: null });
+    return issue._id;
+  }
+  if (args.action === "decline") {
+    await updateIssue(ctx, { issueId: issue._id, status: "canceled", snoozedUntil: null });
+    return issue._id;
+  }
+  if (args.snoozedUntil === undefined || args.snoozedUntil === null || args.snoozedUntil <= Date.now()) {
+    throw new Error("Snooze needs a future time");
+  }
+  await updateIssue(ctx, {
+    issueId: issue._id,
+    status: "triage",
+    snoozedUntil: args.snoozedUntil,
+  });
+  return issue._id;
+}
+
+export const triage = zMutation({
+  args: {
+    issueId: issueIdSchema,
+    action: z.enum(TRIAGE_ACTIONS),
+    status: z.enum(WORKFLOW_STATUSES).optional(),
+    snoozedUntil: z.number().finite().nullable().optional(),
+  },
+  handler: triageIssue,
+});
+
 export const move = zMutation({
   args: {
     issueId: issueIdSchema,
@@ -778,6 +868,7 @@ export const move = zMutation({
       status: args.status,
       order: args.order,
       updatedAt: Date.now(),
+      ...(args.status !== "triage" ? { snoozedUntil: undefined } : {}),
     });
     return issue._id;
   },

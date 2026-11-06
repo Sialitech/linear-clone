@@ -23,7 +23,12 @@ const STORAGE_KEY = "linear-clone:workspace";
 type IssueRelation = { kind: "child" | "parent"; issueId: Id<"issues"> };
 
 type ComposerState =
-  | { mode: "create"; projectId?: Id<"projects">; relation?: IssueRelation }
+  | {
+      mode: "create";
+      projectId?: Id<"projects">;
+      relation?: IssueRelation;
+      status?: IssueStatus;
+    }
   | { mode: "edit"; issueId: Id<"issues"> };
 
 type WorkspaceContextValue = {
@@ -32,7 +37,11 @@ type WorkspaceContextValue = {
   setWorkspaceId: (workspaceId: Id<"workspaces">) => void;
   me: { _id: Id<"users">; name: string | null; email: string | null; image: string | null } | null | undefined;
   composer: ComposerState | null;
-  openCreate: (defaults?: { projectId?: Id<"projects">; relation?: IssueRelation }) => void;
+  openCreate: (defaults?: {
+    projectId?: Id<"projects">;
+    relation?: IssueRelation;
+    status?: IssueStatus;
+  }) => void;
   openEdit: (issueId: Id<"issues">) => void;
   closeComposer: () => void;
   peekIssueId: Id<"issues"> | null;
@@ -112,6 +121,7 @@ export default function WorkspaceProvider({ children }: { children: ReactNode })
           mode: "create",
           projectId: defaults?.projectId,
           ...(defaults?.relation ? { relation: defaults.relation } : {}),
+          ...(defaults?.status ? { status: defaults.status } : {}),
         }),
       openEdit: (issueId) => setComposer({ mode: "edit", issueId }),
       closeComposer: () => setComposer(null),
