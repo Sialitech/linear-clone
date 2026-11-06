@@ -1,4 +1,4 @@
-export const ISSUE_STATUSES = [
+export const WORKFLOW_STATUSES = [
   "backlog",
   "todo",
   "in_progress",
@@ -6,7 +6,39 @@ export const ISSUE_STATUSES = [
   "done",
 ] as const;
 
+export const ISSUE_STATUSES = ["triage", ...WORKFLOW_STATUSES, "canceled"] as const;
+
 export type IssueStatus = (typeof ISSUE_STATUSES)[number];
+
+export type WorkflowStatus = (typeof WORKFLOW_STATUSES)[number];
+
+const workflowStatusSet = new Set<string>(WORKFLOW_STATUSES);
+
+export function isWorkflowStatus(status: string): status is WorkflowStatus {
+  return workflowStatusSet.has(status);
+}
+
+export const TRIAGE_ACTIONS = ["send", "accept", "decline", "snooze"] as const;
+
+export type TriageAction = (typeof TRIAGE_ACTIONS)[number];
+
+export function splitTriage<
+  T extends { snoozedUntil: number | null; priority: Priority; createdAt: number },
+>(issues: T[], now: number) {
+  const waiting: T[] = [];
+  const snoozed: T[] = [];
+  for (const issue of issues) {
+    if (issue.snoozedUntil !== null && issue.snoozedUntil > now) snoozed.push(issue);
+    else waiting.push(issue);
+  }
+  waiting.sort((a, b) => {
+    const diff = PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
+    if (diff !== 0) return diff;
+    return a.createdAt - b.createdAt;
+  });
+  snoozed.sort((a, b) => (a.snoozedUntil ?? 0) - (b.snoozedUntil ?? 0));
+  return { waiting, snoozed };
+}
 
 export const PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
 
@@ -58,11 +90,13 @@ export const CYCLE_STATUSES = ["upcoming", "active", "completed"] as const;
 export type CycleStatus = (typeof CYCLE_STATUSES)[number];
 
 export const ISSUE_STATUS_LABELS: Record<IssueStatus, string> = {
+  triage: "Triage",
   backlog: "Backlog",
   todo: "Todo",
   in_progress: "In Progress",
   in_review: "In Review",
   done: "Done",
+  canceled: "Canceled",
 };
 
 export const PRIORITY_LABELS: Record<Priority, string> = {

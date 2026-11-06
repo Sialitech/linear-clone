@@ -1,6 +1,6 @@
 # Linear clone
 
-Issue tracker with a Linear-style interface: inbox, project lists, a Kanban board, and live comments.
+Issue tracker with a Linear-style interface: inbox, triage, project lists, a Kanban board, and live comments.
 
 - Next.js 15 (App Router) + TypeScript + Tailwind CSS + shadcn/ui
 - Convex for the database, queries, mutations, and auth
@@ -77,7 +77,9 @@ https://<your-deployment>.convex.site/github/oauth/callback
 2. Point the client at `https://linear.sialitech.com/mcp` (or the origin shown in Settings).
 3. Send `Authorization: Bearer lin_…` on every request.
 
-Tools: `whoami`, `list_projects`, `list_users`, `list_labels`, `list_cycles`, `list_issue_statuses`, `list_issues`, `get_issue`, `save_issue`, `list_comments`, `save_comment`, `delete_comment`.
+Tools: `whoami`, `list_projects`, `list_users`, `list_labels`, `list_cycles`, `list_issue_statuses`, `list_issues`, `get_issue`, `save_issue`, `list_triage`, `triage_issue`, `list_comments`, `save_comment`, `delete_comment`.
+
+`list_triage` returns issues waiting in triage. `triage_issue` takes `send`, `accept`, `decline`, or `snooze`. Accept moves an issue to Todo unless `status` is set. Decline cancels it. Snooze needs `snoozeUntil` as `YYYY-MM-DD`. Triage and canceled issues stay out of `list_issues` unless `status` or a search query is set.
 
 A token acts as the member who created it, inside that workspace. Issue ids accept Convex ids or identifiers such as `ENG-12`. `assignee` accepts a user id or `me`.
 

@@ -2,7 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ISSUE_STATUSES, type IssueStatus } from "@convex/model";
+import { isWorkflowStatus, WORKFLOW_STATUSES, type WorkflowStatus } from "@convex/model";
 import IssueContextMenu from "@/components/issue-context-menu";
 import IssueSkeleton from "@/components/issue-skeleton";
 import LabelChip from "@/components/label-chip";
@@ -37,7 +37,7 @@ import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-type Columns = Record<IssueStatus, IssueItem[]>;
+type Columns = Record<WorkflowStatus, IssueItem[]>;
 
 function groupIssues(issues: IssueItem[]): Columns {
   const columns = {
@@ -47,20 +47,23 @@ function groupIssues(issues: IssueItem[]): Columns {
     in_review: [],
     done: [],
   } as Columns;
-  for (const issue of issues) columns[issue.status].push(issue);
-  for (const status of ISSUE_STATUSES) {
+  for (const issue of issues) {
+    if (!isWorkflowStatus(issue.status)) continue;
+    columns[issue.status].push(issue);
+  }
+  for (const status of WORKFLOW_STATUSES) {
     columns[status].sort((a, b) => a.order - b.order);
   }
   return columns;
 }
 
-function isStatus(value: string): value is IssueStatus {
-  return (ISSUE_STATUSES as readonly string[]).includes(value);
+function isStatus(value: string): value is WorkflowStatus {
+  return isWorkflowStatus(value);
 }
 
-function containerOf(columns: Columns, id: string): IssueStatus | null {
+function containerOf(columns: Columns, id: string): WorkflowStatus | null {
   if (isStatus(id)) return id;
-  for (const status of ISSUE_STATUSES) {
+  for (const status of WORKFLOW_STATUSES) {
     if (columns[status].some((issue) => issue._id === id)) return status;
   }
   return null;
@@ -187,7 +190,7 @@ export default function KanbanBoard({
   }
 
   const activeIssue = activeId
-    ? ISSUE_STATUSES.flatMap((status) => columns[status]).find((issue) => issue._id === activeId)
+    ? WORKFLOW_STATUSES.flatMap((status) => columns[status]).find((issue) => issue._id === activeId)
     : undefined;
 
   if (issues === undefined) {
@@ -207,7 +210,7 @@ export default function KanbanBoard({
       }}
     >
       <div className="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
-        {ISSUE_STATUSES.map((status) => (
+        {WORKFLOW_STATUSES.map((status) => (
           <Column
             key={status}
             status={status}
@@ -228,7 +231,7 @@ function Column({
   issues,
   onOpen,
 }: {
-  status: IssueStatus;
+  status: WorkflowStatus;
   issues: IssueItem[];
   onOpen: (issueId: Id<"issues">) => void;
 }) {

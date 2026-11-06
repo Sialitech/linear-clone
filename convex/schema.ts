@@ -3,11 +3,13 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 const issueStatus = v.union(
+  v.literal("triage"),
   v.literal("backlog"),
   v.literal("todo"),
   v.literal("in_progress"),
   v.literal("in_review"),
   v.literal("done"),
+  v.literal("canceled"),
 );
 
 const priority = v.union(
@@ -126,6 +128,8 @@ export default defineSchema({
     assigneeId: v.optional(v.id("users")),
     creatorId: v.id("users"),
     status: issueStatus,
+    // Set while a triage issue is hidden. Cleared when it leaves triage.
+    snoozedUntil: v.optional(v.number()),
     priority: priority,
     labelIds: v.array(v.id("labels")),
     dueDate: v.optional(v.number()),

@@ -41,14 +41,14 @@ export const MCP_TOOLS = [
   {
     name: "list_issues",
     description:
-      "List issues in the token's workspace. Filter by project id or project key, status, priority, assignee (user id or \"me\"), label, cycle, or search text.",
+      "List issues in the token's workspace. Triage and canceled issues are omitted unless status or search text is set. Filter by project id or project key, status, priority, assignee (user id or \"me\"), label, cycle, or search text.",
     inputSchema: {
       type: "object",
       properties: {
         project: { type: "string", description: "Project id or key, such as ENG." },
         status: {
           type: "string",
-          enum: ["backlog", "todo", "in_progress", "in_review", "done"],
+          enum: ["triage", "backlog", "todo", "in_progress", "in_review", "done", "canceled"],
         },
         priority: { type: "string", enum: ["urgent", "high", "medium", "low", "none"] },
         assignee: { type: "string", description: "User id, or \"me\"." },
@@ -86,7 +86,7 @@ export const MCP_TOOLS = [
         description: { type: "string" },
         status: {
           type: "string",
-          enum: ["backlog", "todo", "in_progress", "in_review", "done"],
+          enum: ["triage", "backlog", "todo", "in_progress", "in_review", "done", "canceled"],
         },
         priority: { type: "string", enum: ["urgent", "high", "medium", "low", "none"] },
         assignee: { type: ["string", "null"] },
@@ -95,6 +95,43 @@ export const MCP_TOOLS = [
         cycle: { type: ["string", "null"] },
         parent: { type: ["string", "null"], description: "Parent issue id or identifier. Create only." },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "list_triage",
+    description:
+      "List issues waiting in triage, highest priority first. Snoozed issues stay hidden until includeSnoozed is true. Accept, decline, or snooze them with triage_issue.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Optional project id or key." },
+        includeSnoozed: { type: "boolean" },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "triage_issue",
+    description:
+      "Move an issue through triage. send puts it in triage. accept moves it to a workflow status (default todo). decline cancels it. snooze hides it until snoozeUntil (YYYY-MM-DD). id is an issue id or an identifier such as ENG-12.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        action: { type: "string", enum: ["send", "accept", "decline", "snooze"] },
+        status: {
+          type: "string",
+          enum: ["backlog", "todo", "in_progress", "in_review", "done"],
+          description: "Workflow status used when accepting. Defaults to todo.",
+        },
+        snoozeUntil: {
+          type: "string",
+          description: "YYYY-MM-DD. Required for snooze. The issue returns to triage on that date.",
+        },
+      },
+      required: ["id", "action"],
       additionalProperties: false,
     },
   },

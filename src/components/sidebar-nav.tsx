@@ -29,6 +29,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation, useQuery } from "convex/react";
 import {
   ChevronDown,
+  CircleDot,
   Inbox,
   Kanban,
   LogOut,
@@ -59,6 +60,11 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
     workspace ? { workspaceId: workspace._id } : "skip",
   );
   const views = useQuery(api.views.list, workspace ? { workspaceId: workspace._id } : "skip");
+  const triage = useQuery(
+    api.issues.triageQueue,
+    workspace ? { workspaceId: workspace._id } : "skip",
+  );
+  const triageCount = triage?.waiting.length ?? 0;
   const pruneSeeded = useMutation(api.views.pruneSeeded);
   const prunedWorkspace = useRef<Id<"workspaces"> | null>(null);
   const { signOut } = useAuthActions();
@@ -140,6 +146,13 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
         <NavLink href="/" active={pathname === "/"} onNavigate={onNavigate} roomy={roomy}>
           <Inbox className="size-3.5" />
           Inbox
+        </NavLink>
+        <NavLink href="/triage" active={pathname === "/triage"} onNavigate={onNavigate} roomy={roomy}>
+          <CircleDot className="size-3.5" />
+          Triage
+          {triageCount > 0 ? (
+            <span className="ml-auto font-mono text-[10px] tabular-nums">{triageCount}</span>
+          ) : null}
         </NavLink>
         <NavLink href="/projects" active={pathname === "/projects"} onNavigate={onNavigate} roomy={roomy}>
           <Kanban className="size-3.5" />

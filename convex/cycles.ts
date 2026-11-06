@@ -223,7 +223,7 @@ export const moveUnfinishedToNext = zMutation({
       .take(500);
     const now = Date.now();
     for (const issue of issues) {
-      if (issue.status === "done") continue;
+      if (issue.status === "done" || issue.status === "canceled") continue;
       await ctx.db.patch("issues", issue._id, {
         cycleId: next._id,
         updatedAt: now,

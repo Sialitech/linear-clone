@@ -1,11 +1,13 @@
 import { ISSUE_STATUS_LABELS, type IssueStatus } from "@convex/model";
 
 const color: Record<IssueStatus, string> = {
+  triage: "#f2994a",
   backlog: "#8b8f98",
   todo: "#e4e4e7",
   in_progress: "#f2c94c",
   in_review: "#4cb782",
   done: "#5e6ad2",
+  canceled: "#8b8f98",
 };
 
 export default function StatusIcon({
@@ -18,6 +20,12 @@ export default function StatusIcon({
   const stroke = color[status];
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden>
+      {status === "triage" ? (
+        <>
+          <circle cx="8" cy="8" r="6" fill="none" stroke={stroke} strokeWidth="1.5" />
+          <circle cx="8" cy="8" r="1.7" fill={stroke} />
+        </>
+      ) : null}
       {status === "backlog" ? (
         <circle
           cx="8"
@@ -55,6 +63,18 @@ export default function StatusIcon({
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
+          />
+        </>
+      ) : null}
+      {status === "canceled" ? (
+        <>
+          <circle cx="8" cy="8" r="6" fill="none" stroke={stroke} strokeWidth="1.5" />
+          <path
+            d="M5.6 5.6 L10.4 10.4 M10.4 5.6 L5.6 10.4"
+            fill="none"
+            stroke={stroke}
+            strokeWidth="1.5"
+            strokeLinecap="round"
           />
         </>
       ) : null}

@@ -82,11 +82,11 @@ type Draft = {
   subIssues: string[];
 };
 
-const emptyDraft = (projectId?: Id<"projects">): Draft => ({
+const emptyDraft = (projectId?: Id<"projects">, status: IssueStatus = "backlog"): Draft => ({
   title: "",
   description: "",
   projectId: projectId ?? "",
-  status: "backlog",
+  status,
   priority: "none",
   assigneeId: null,
   labelIds: [],
@@ -173,7 +173,7 @@ export default function IssueComposer() {
 
   useEffect(() => {
     if (composer?.mode !== "create") return;
-    setDraft(emptyDraft(composer.projectId));
+    setDraft(emptyDraft(composer.projectId, composer.status ?? "backlog"));
     hydratedIssue.current = null;
     assigneeDefaulted.current = false;
     setSubIssueDraft("");

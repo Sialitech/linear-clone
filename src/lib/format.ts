@@ -29,7 +29,7 @@ export function formatRelative(timestamp: number) {
 }
 
 export function isOverdue(timestamp: number, status: string) {
-  if (status === "done") return false;
+  if (status === "done" || status === "canceled") return false;
   return startOfDay(timestamp).getTime() < startOfDay(new Date()).getTime();
 }
 
