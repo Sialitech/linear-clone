@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { assertCanManage, requireWorkspaceMember, type ReadCtx } from "./lib/access";
 import { webhookIdSchema, workspaceIdSchema, zMutation, zQuery } from "./lib/functions";
+import { expandWebhookResources, WEBHOOK_EVENT_IDS } from "./lib/webhookEvents";
 import { enqueueDelivery } from "./lib/webhooks";
 import {
   WEBHOOK_FAILURES_BEFORE_DISABLE,
@@ -16,9 +17,9 @@ import { createWebhookSecret, signWebhookBody } from "./lib/webhookSign";
 import { assertWebhookUrl, webhookUrlError } from "./lib/webhookUrl";
 
 const resourceSchema = z
-  .array(z.enum(["Issue", "Comment"]))
+  .array(z.enum(WEBHOOK_EVENT_IDS))
   .min(1, "Choose at least one event")
-  .max(2);
+  .max(WEBHOOK_EVENT_IDS.length);
 const labelSchema = z.string().trim().min(1, "Enter a label").max(60);
 const urlSchema = z.string().trim().min(1, "Enter a webhook URL").max(2000);
 
@@ -62,7 +63,7 @@ function summarizeWebhook(webhook: Doc<"webhooks">, delivery: Doc<"webhookDelive
     _id: webhook._id,
     label: webhook.label,
     url: webhook.url,
-    resources: webhook.resources,
+    resources: expandWebhookResources(webhook.resources),
     enabled: webhook.enabled,
     createdAt: webhook.createdAt,
     consecutiveFailures: webhook.consecutiveFailures,
@@ -159,7 +160,7 @@ export const update = zMutation({
     const patch: {
       label?: string;
       url?: string;
-      resources?: ("Issue" | "Comment")[];
+      resources?: (typeof WEBHOOK_EVENT_IDS)[number][];
       enabled?: boolean;
       consecutiveFailures?: number;
       disabledReason?: undefined;

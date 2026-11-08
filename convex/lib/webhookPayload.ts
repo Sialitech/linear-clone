@@ -17,10 +17,11 @@ export function updatedFrom<T extends Record<string, WebhookValue>>(before: T, a
 
 export function webhookBody(args: {
   action: "create" | "update" | "remove";
-  type: "Issue" | "Comment" | "Ping";
+  type: string;
   createdAt: string;
   data: object;
   updatedFrom?: object;
+  related?: { id: string; identifier: string };
 }) {
   return JSON.stringify({
     action: args.action,
@@ -28,6 +29,7 @@ export function webhookBody(args: {
     createdAt: args.createdAt,
     data: args.data,
     ...(args.updatedFrom ? { updatedFrom: args.updatedFrom } : {}),
+    ...(args.related ? { related: args.related } : {}),
   });
 }
 

@@ -2,9 +2,18 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import type { ReadCtx } from "./access";
+import { subscribesTo, type WebhookEvent } from "./webhookEvents";
 import { WEBHOOK_DELIVERY_LIMIT, webhookBody } from "./webhookPayload";
 
 type DeliveryAction = "create" | "update" | "remove";
+
+export type WebhookNotice = {
+  event: WebhookEvent;
+  action: DeliveryAction;
+  data: object;
+  updatedFrom?: object;
+  related?: { id: string; identifier: string };
+};
 
 export async function issueWebhookData(ctx: ReadCtx, issue: Doc<"issues">) {
   const project = await ctx.db.get("projects", issue.projectId);
@@ -42,38 +51,42 @@ export function commentWebhookData(comment: {
   };
 }
 
-export async function emitWebhook(
+export async function emitWebhookEvents(
   ctx: MutationCtx,
   args: {
     workspaceId: Id<"workspaces">;
-    event: "Issue" | "Comment";
-    action: DeliveryAction;
-    data: object;
-    updatedFrom?: object;
+    notifications: WebhookNotice[];
   },
 ) {
+  if (args.notifications.length === 0) return;
   const hooks = await ctx.db
     .query("webhooks")
     .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
     .take(10);
-  const targets = hooks.filter((hook) => hook.enabled && hook.resources.includes(args.event));
-  if (targets.length === 0) return;
-  const body = webhookBody({
-    action: args.action,
-    type: args.event,
-    createdAt: new Date().toISOString(),
-    data: args.data,
-    updatedFrom: definedFields(args.updatedFrom),
-  });
-  for (const hook of targets) {
-    await enqueueDelivery(ctx, hook, args.event, args.action, body);
+  const enabled = hooks.filter((hook) => hook.enabled);
+  if (enabled.length === 0) return;
+  const createdAt = new Date().toISOString();
+  for (const notice of args.notifications) {
+    const targets = enabled.filter((hook) => subscribesTo(hook.resources, notice.event));
+    if (targets.length === 0) continue;
+    const body = webhookBody({
+      action: notice.action,
+      type: notice.event,
+      createdAt,
+      data: notice.data,
+      updatedFrom: definedFields(notice.updatedFrom),
+      related: notice.related,
+    });
+    for (const hook of targets) {
+      await enqueueDelivery(ctx, hook, notice.event, notice.action, body);
+    }
   }
 }
 
 export async function enqueueDelivery(
   ctx: MutationCtx,
   webhook: Doc<"webhooks">,
-  event: "Issue" | "Comment" | "Ping",
+  event: string,
   action: DeliveryAction,
   body: string,
 ) {

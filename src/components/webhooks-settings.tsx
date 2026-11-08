@@ -2,6 +2,13 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import {
+  WEBHOOK_EVENT_GROUPS,
+  WEBHOOK_EVENT_IDS,
+  WEBHOOK_EVENT_LABELS,
+  webhookSelectionLabel,
+  type WebhookEvent,
+} from "@convex/lib/webhookEvents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,8 +26,7 @@ export default function WebhooksSettings({ workspaceId }: { workspaceId: Id<"wor
   const sendTest = useMutation(api.webhooks.sendTest);
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
-  const [issueEvents, setIssueEvents] = useState(true);
-  const [commentEvents, setCommentEvents] = useState(true);
+  const [events, setEvents] = useState<WebhookEvent[]>([...WEBHOOK_EVENT_IDS]);
   const [openId, setOpenId] = useState<Id<"webhooks"> | null>(null);
 
   const detail = useQuery(
@@ -34,16 +40,12 @@ export default function WebhooksSettings({ workspaceId }: { workspaceId: Id<"wor
 
   async function onCreate(event: React.FormEvent) {
     event.preventDefault();
-    const resources = [
-      ...(issueEvents ? (["Issue"] as const) : []),
-      ...(commentEvents ? (["Comment"] as const) : []),
-    ];
-    if (resources.length === 0) {
-      toast.error("Choose Issue, Comment, or both");
+    if (events.length === 0) {
+      toast.error("Choose at least one event");
       return;
     }
     try {
-      const created = await createWebhook({ workspaceId, label, url, resources });
+      const created = await createWebhook({ workspaceId, label, url, resources: events });
       setOpenId(created.id);
       setLabel("");
       setUrl("");
@@ -57,7 +59,7 @@ export default function WebhooksSettings({ workspaceId }: { workspaceId: Id<"wor
     <section>
       <h2 className="text-sm font-medium">Webhooks</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        Notify an https endpoint when an issue or comment changes. Requests are signed with HMAC-SHA256 and are not sent when a card only changes order.
+        Choose exactly which changes notify an https endpoint. A card move that only changes order is not an event.
       </p>
       <form onSubmit={(event) => void onCreate(event)} className="mt-3 space-y-3 rounded-md border border-border p-3">
         <div className="space-y-1.5">
@@ -74,22 +76,7 @@ export default function WebhooksSettings({ workspaceId }: { workspaceId: Id<"wor
             className="font-mono text-xs"
           />
         </div>
-        <fieldset className="flex gap-4 text-xs">
-          <legend className="mb-1 text-xs text-muted-foreground">Events</legend>
-          <label className="flex items-center gap-2" htmlFor="webhook-issue">
-            <input id="webhook-issue" type="checkbox" checked={issueEvents} onChange={(event) => setIssueEvents(event.target.checked)} />
-            Issue
-          </label>
-          <label className="flex items-center gap-2" htmlFor="webhook-comment">
-            <input
-              id="webhook-comment"
-              type="checkbox"
-              checked={commentEvents}
-              onChange={(event) => setCommentEvents(event.target.checked)}
-            />
-            Comment
-          </label>
-        </fieldset>
+        <EventPicker idPrefix="webhook" selected={events} onChange={setEvents} />
         <Button type="submit" size="sm">Create webhook</Button>
       </form>
       <ul className="mt-3 space-y-2">
@@ -100,7 +87,7 @@ export default function WebhooksSettings({ workspaceId }: { workspaceId: Id<"wor
                 <span className="text-sm">{hook.label}</span>
                 <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">{hook.url}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
-                  {hook.resources.join(", ")}
+                  {webhookSelectionLabel(hook.resources)}
                   {hook.enabled ? "" : " · Disabled"}
                   {hook.lastDelivery
                     ? ` · ${hook.lastDelivery.event} ${hook.lastDelivery.status}${hook.lastDelivery.httpStatus ? ` ${hook.lastDelivery.httpStatus}` : ""}`
@@ -165,7 +152,7 @@ function WebhookDetail({
     _id: Id<"webhooks">;
     label: string;
     url: string;
-    resources: ("Issue" | "Comment")[];
+    resources: WebhookEvent[];
     enabled: boolean;
     secret: string;
   };
@@ -179,14 +166,13 @@ function WebhookDetail({
     error: string | null;
     createdAt: number;
   }[];
-  onSave: (next: { label: string; url: string; resources: ("Issue" | "Comment")[] }) => Promise<unknown>;
+  onSave: (next: { label: string; url: string; resources: WebhookEvent[] }) => Promise<unknown>;
   onRotate: () => Promise<unknown>;
   onTest: () => Promise<unknown>;
 }) {
   const [label, setLabel] = useState(detail.label);
   const [url, setUrl] = useState(detail.url);
-  const [issueEvents, setIssueEvents] = useState(detail.resources.includes("Issue"));
-  const [commentEvents, setCommentEvents] = useState(detail.resources.includes("Comment"));
+  const [events, setEvents] = useState<WebhookEvent[]>(detail.resources);
 
   return (
     <div className="mt-3 space-y-3 border-t border-border pt-3">
@@ -194,15 +180,11 @@ function WebhookDetail({
         className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
-          const resources = [
-            ...(issueEvents ? (["Issue"] as const) : []),
-            ...(commentEvents ? (["Comment"] as const) : []),
-          ];
-          if (resources.length === 0) {
-            toast.error("Choose Issue, Comment, or both");
+          if (events.length === 0) {
+            toast.error("Choose at least one event");
             return;
           }
-          void onSave({ label, url, resources })
+          void onSave({ label, url, resources: events })
             .then(() => toast.success("Webhook saved"))
             .catch((error: unknown) => toast.error(errorMessage(error)));
         }}
@@ -215,17 +197,7 @@ function WebhookDetail({
           <Label htmlFor={`webhook-edit-url-${detail._id}`}>URL</Label>
           <Input id={`webhook-edit-url-${detail._id}`} value={url} onChange={(event) => setUrl(event.target.value)} className="font-mono text-xs" />
         </div>
-        <fieldset className="flex gap-4 text-xs">
-          <legend className="mb-1 text-xs text-muted-foreground">Events</legend>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={issueEvents} onChange={(event) => setIssueEvents(event.target.checked)} />
-            Issue
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={commentEvents} onChange={(event) => setCommentEvents(event.target.checked)} />
-            Comment
-          </label>
-        </fieldset>
+        <EventPicker idPrefix={`webhook-edit-${detail._id}`} selected={events} onChange={setEvents} />
         <Button type="submit" size="sm">Save webhook</Button>
       </form>
       <div className="space-y-1.5">
@@ -280,7 +252,7 @@ function WebhookDetail({
           <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
             {deliveries.map((delivery) => (
               <li key={delivery._id}>
-                {new Date(delivery.createdAt).toLocaleString()} · {delivery.event} {delivery.action} · {delivery.status}
+                {new Date(delivery.createdAt).toLocaleString()} · {eventLabel(delivery.event)} · {delivery.status}
                 {delivery.httpStatus ? ` · HTTP ${delivery.httpStatus}` : ""}
                 {delivery.attempts > 1 ? ` · ${delivery.attempts} attempts` : ""}
                 {delivery.error ? ` · ${delivery.error}` : ""}
@@ -289,6 +261,68 @@ function WebhookDetail({
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+function eventLabel(event: string) {
+  return event in WEBHOOK_EVENT_LABELS ? WEBHOOK_EVENT_LABELS[event as WebhookEvent] : event;
+}
+
+function EventPicker({
+  idPrefix,
+  selected,
+  onChange,
+}: {
+  idPrefix: string;
+  selected: WebhookEvent[];
+  onChange: (next: WebhookEvent[]) => void;
+}) {
+  function toggle(event: WebhookEvent, checked: boolean) {
+    onChange(checked ? [...selected, event] : selected.filter((item) => item !== event));
+  }
+
+  function toggleGroup(events: readonly WebhookEvent[], clear: boolean) {
+    const group = new Set<string>(events);
+    if (clear) {
+      onChange(selected.filter((event) => !group.has(event)));
+      return;
+    }
+    onChange(WEBHOOK_EVENT_IDS.filter((event) => selected.includes(event) || group.has(event)));
+  }
+
+  return (
+    <div className="space-y-3">
+      {WEBHOOK_EVENT_GROUPS.map((group) => {
+        const allOn = group.events.every((event) => selected.includes(event));
+        return (
+          <fieldset key={group.id}>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <legend className="text-xs font-medium">{group.label}</legend>
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                onClick={() => toggleGroup(group.events, allOn)}
+              >
+                {allOn ? "Clear" : "All"}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {group.events.map((event) => (
+                <label key={event} className="flex items-center gap-2 text-xs" htmlFor={`${idPrefix}-${event}`}>
+                  <input
+                    id={`${idPrefix}-${event}`}
+                    type="checkbox"
+                    checked={selected.includes(event)}
+                    onChange={(change) => toggle(event, change.target.checked)}
+                  />
+                  {WEBHOOK_EVENT_LABELS[event]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        );
+      })}
     </div>
   );
 }

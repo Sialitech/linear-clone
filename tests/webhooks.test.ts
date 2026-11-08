@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { describe, it } from "node:test";
+import {
+  commentChangeEvents,
+  expandWebhookResources,
+  issueChangeEvents,
+  subscribesTo,
+  type IssueChangeSnapshot,
+} from "../convex/lib/webhookEvents.ts";
 import { retryDelayMs, updatedFrom, webhookBody } from "../convex/lib/webhookPayload.ts";
 import { signWebhookBody } from "../convex/lib/webhookSign.ts";
 import { assertWebhookUrl, webhookUrlError } from "../convex/lib/webhookUrl.ts";
@@ -49,6 +56,84 @@ describe("webhook URLs", () => {
     assert.equal(webhookUrlError("https://[2001:4860:4860::8888]/hook"), null);
     assert.equal(webhookUrlError("https://172.15.0.1/hook"), null);
     assert.equal(webhookUrlError("https://172.32.0.1/hook"), null);
+  });
+});
+
+function snapshot(overrides: Partial<IssueChangeSnapshot> = {}): IssueChangeSnapshot {
+  return {
+    title: "Ship it",
+    description: "",
+    status: "todo",
+    priority: "none",
+    assigneeId: null,
+    projectId: "project_1",
+    identifier: "ENG-1",
+    labelIds: [],
+    dueDate: null,
+    cycleId: null,
+    parentId: null,
+    snoozedUntil: null,
+    ...overrides,
+  };
+}
+
+describe("webhook event selection", () => {
+  it("emits one event per changed field", () => {
+    const events = issueChangeEvents(
+      snapshot({ status: "todo", assigneeId: null }),
+      snapshot({ status: "in_progress", assigneeId: "user_1" }),
+    );
+    assert.deepEqual(
+      events.map((event) => event.event),
+      ["issue.status_changed", "issue.assignee_changed"],
+    );
+    assert.deepEqual(events[0]?.updatedFrom, { status: "todo" });
+    assert.deepEqual(events[1]?.updatedFrom, { assigneeId: null });
+  });
+
+  it("distinguishes due date set, change, and clear", () => {
+    assert.equal(issueChangeEvents(snapshot(), snapshot({ dueDate: 10 }))[0]?.event, "issue.due_date_set");
+    assert.equal(
+      issueChangeEvents(snapshot({ dueDate: 10 }), snapshot({ dueDate: 20 }))[0]?.event,
+      "issue.due_date_changed",
+    );
+    assert.equal(
+      issueChangeEvents(snapshot({ dueDate: 10 }), snapshot())[0]?.event,
+      "issue.due_date_cleared",
+    );
+  });
+
+  it("ignores label order and card order", () => {
+    assert.deepEqual(
+      issueChangeEvents(snapshot({ labelIds: ["b", "a"] }), snapshot({ labelIds: ["a", "b"] })),
+      [],
+    );
+  });
+
+  it("splits label adds and removes", () => {
+    const events = issueChangeEvents(
+      snapshot({ labelIds: ["keep", "old"] }),
+      snapshot({ labelIds: ["keep", "new"] }),
+    );
+    assert.deepEqual(
+      events.map((event) => event.event),
+      ["issue.labels_added", "issue.labels_removed"],
+    );
+  });
+
+  it("treats a legacy Issue subscription as every issue event", () => {
+    assert.equal(subscribesTo(["Issue"], "issue.status_changed"), true);
+    assert.equal(subscribesTo(["Issue"], "comment.created"), false);
+    assert.equal(subscribesTo(["issue.assignee_changed"], "issue.assignee_changed"), true);
+    assert.ok(expandWebhookResources(["Comment"]).includes("comment.deleted"));
+  });
+
+  it("emits comment.edited only when content or mentions change", () => {
+    assert.deepEqual(commentChangeEvents({ content: "A", mentionIds: [] }, { content: "A", mentionIds: [] }), []);
+    assert.equal(
+      commentChangeEvents({ content: "A", mentionIds: [] }, { content: "B", mentionIds: ["user_1"] }).length,
+      1,
+    );
   });
 });
 

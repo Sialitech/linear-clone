@@ -3,8 +3,8 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { z } from "zod";
 import { loadPublicUser, requireIssueAccess, type ReadCtx } from "./lib/access";
 import { recordActivity } from "./lib/activity";
-import { updatedFrom } from "./lib/webhookPayload";
-import { commentWebhookData, emitWebhook } from "./lib/webhooks";
+import { commentChangeEvents } from "./lib/webhookEvents";
+import { commentWebhookData, emitWebhookEvents } from "./lib/webhooks";
 import {
   commentIdSchema,
   issueIdSchema,
@@ -132,17 +132,21 @@ export async function createComment(
       actorId: userId,
       type: "comment_added",
     });
-    await emitWebhook(ctx, {
+    await emitWebhookEvents(ctx, {
       workspaceId: issue.workspaceId,
-      event: "Comment",
-      action: "create",
-      data: commentWebhookData({
-        _id: commentId,
-        issueId: args.issueId,
-        authorId: userId,
-        content: args.content,
-        mentionIds,
-      }),
+      notifications: [
+        {
+          event: "comment.created",
+          action: "create",
+          data: commentWebhookData({
+            _id: commentId,
+            issueId: args.issueId,
+            authorId: userId,
+            content: args.content,
+            mentionIds,
+          }),
+        },
+      ],
     });
     return commentId;
 }
@@ -207,16 +211,15 @@ export async function updateComment(
       content: args.content,
       mentionIds,
     });
-    const diff = updatedFrom(before, after);
-    if (diff) {
-      await emitWebhook(ctx, {
-        workspaceId: issue.workspaceId,
-        event: "Comment",
-        action: "update",
+    await emitWebhookEvents(ctx, {
+      workspaceId: issue.workspaceId,
+      notifications: commentChangeEvents(before, after).map((change) => ({
+        event: change.event,
+        action: "update" as const,
         data: after,
-        updatedFrom: diff,
-      });
-    }
+        updatedFrom: change.updatedFrom,
+      })),
+    });
     return comment._id;
 }
 
@@ -246,11 +249,9 @@ export async function removeComment(ctx: MutationCtx, commentId: Id<"comments">)
       actorId: userId,
       type: "comment_deleted",
     });
-    await emitWebhook(ctx, {
+    await emitWebhookEvents(ctx, {
       workspaceId: issue.workspaceId,
-      event: "Comment",
-      action: "remove",
-      data: removed,
+      notifications: [{ event: "comment.deleted", action: "remove", data: removed }],
     });
     return comment._id;
 }

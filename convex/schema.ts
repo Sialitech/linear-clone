@@ -298,7 +298,8 @@ export default defineSchema({
     url: v.string(),
     secret: v.string(),
     enabled: v.boolean(),
-    resources: v.array(v.union(v.literal("Issue"), v.literal("Comment"))),
+    // Event ids from webhookEvents, plus legacy "Issue" and "Comment".
+    resources: v.array(v.string()),
     createdAt: v.number(),
     consecutiveFailures: v.number(),
     disabledReason: v.optional(v.string()),
@@ -306,7 +307,7 @@ export default defineSchema({
   webhookDeliveries: defineTable({
     webhookId: v.id("webhooks"),
     workspaceId: v.id("workspaces"),
-    event: v.union(v.literal("Issue"), v.literal("Comment"), v.literal("Ping")),
+    event: v.string(),
     action: v.union(v.literal("create"), v.literal("update"), v.literal("remove")),
     body: v.string(),
     status: v.union(v.literal("pending"), v.literal("succeeded"), v.literal("failed")),

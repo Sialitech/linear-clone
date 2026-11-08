@@ -85,25 +85,25 @@ A token acts as the member who created it, inside that workspace. Issue ids acce
 
 ## Webhooks
 
-Owners and admins register an https endpoint in **Settings → Webhooks**. The workspace sends one POST when an issue or comment is created, updated, or removed. A board drag that only changes order does not send an event. Deleting an issue sends `Issue` `remove` and does not send a comment event for each deleted comment.
+Owners and admins register an https endpoint in **Settings → Webhooks** and choose each event they want: issue created, deleted, title, description, status, priority, assignee, due date, labels, cycle, project, parent, sub-issue, snooze, and comment added, edited, or deleted. One mutation can send several events when several chosen fields change. A board drag that only changes order does not send an event. Deleting an issue sends `issue.deleted` and does not send a comment event for each deleted comment.
 
 ```json
 {
   "action": "update",
-  "type": "Issue",
+  "type": "issue.status_changed",
   "createdAt": "2026-11-08T00:00:00.000Z",
   "data": { "id": "...", "identifier": "ENG-12", "title": "...", "status": "todo" },
   "updatedFrom": { "status": "backlog" }
 }
 ```
 
-`updatedFrom` is only present on updates, and only with the previous value of fields that changed. Issue `data` includes id, identifier, title, description, status, priority, assigneeId, projectId, labelIds, dueDate, cycleId, parentId, creatorId, and snoozedUntil. Comment `data` includes id, issueId, authorId, content, and mentionIds. **Send test** queues a `Ping`.
+`updatedFrom` is the previous value of the field that event is about. Issue `data` includes id, identifier, title, description, status, priority, assigneeId, projectId, labelIds, dueDate, cycleId, parentId, creatorId, and snoozedUntil. Comment `data` includes id, issueId, authorId, content, and mentionIds. Sub-issue events include `related` with the child id and identifier. **Send test** queues a `Ping`.
 
 Headers:
 
 - `Content-Type: application/json`
 - `X-Webhook-Id`: delivery id, reused for retries
-- `X-Webhook-Event`: `Issue`, `Comment`, or `Ping`
+- `X-Webhook-Event`: the event id, such as `issue.status_changed`, or `Ping`
 - `X-Webhook-Signature`: `sha256=` plus the hex HMAC-SHA256 of the raw body. Sign with the secret exactly as shown, including the `whsec_` prefix.
 
 A response that is not 2xx is retried after 30 seconds, 2 minutes, 10 minutes, and 1 hour. The fifth failure is final. Ten failed deliveries in a row disable the webhook. Redirects are not followed. The URL must be https, without a username or password, and its host cannot be localhost, a `.local` name, or a private or link-local address.
