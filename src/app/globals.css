@@ -223,9 +223,9 @@
 
 .markdown-body .markdown-mention {
   border-radius: 0.25rem;
-  background: var(--md-muted);
-  padding: 0 0.2rem;
-  color: var(--md-fg);
+  background: color-mix(in srgb, var(--md-link) 18%, transparent);
+  padding: 0 0.28rem;
+  color: var(--md-link);
   font-weight: 600;
   text-decoration: none;
 }
