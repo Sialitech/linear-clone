@@ -3,6 +3,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import ThemeToggle from "@/components/theme-toggle";
+import WebhooksSettings from "@/components/webhooks-settings";
 import UserAvatar from "@/components/user-avatar";
 import { useWorkspace } from "@/components/workspace-provider";
 import { Button } from "@/components/ui/button";
@@ -389,6 +390,7 @@ export default function SettingsScreen() {
             </ul>
           </div>
         </section>
+        {canManage && workspace ? <WebhooksSettings workspaceId={workspace._id} /> : null}
         <section>
           <h2 className="text-sm font-medium">GitHub</h2>
           <p className="mt-1 text-xs text-muted-foreground">

@@ -1,5 +1,5 @@
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { z } from "zod";
 import {
   loadPublicUser,
@@ -30,6 +30,8 @@ import {
   zQuery,
 } from "./lib/functions";
 import { toSearchText } from "./lib/keys";
+import { updatedFrom } from "./lib/webhookPayload";
+import { emitWebhook, issueWebhookData } from "./lib/webhooks";
 import { isWorkflowStatus, splitTriage, TRIAGE_ACTIONS, WORKFLOW_STATUSES } from "./model";
 
 const labelIdsSchema = z.array(labelIdSchema).max(12);
@@ -69,6 +71,20 @@ const MAX_PARENT_DEPTH = 6;
 async function issueIdentifier(ctx: ReadCtx, issue: Doc<"issues">) {
   const project = await ctx.db.get("projects", issue.projectId);
   return `${project?.key ?? "ISS"}-${issue.number}`;
+}
+
+async function publishIssueUpdate(ctx: MutationCtx, before: Doc<"issues">, after: Doc<"issues">) {
+  const previous = await issueWebhookData(ctx, before);
+  const next = await issueWebhookData(ctx, after);
+  const diff = updatedFrom(previous, next);
+  if (!diff) return;
+  await emitWebhook(ctx, {
+    workspaceId: after.workspaceId,
+    event: "Issue",
+    action: "update",
+    data: next,
+    updatedFrom: diff,
+  });
 }
 
 async function assertParent(
@@ -521,6 +537,15 @@ export async function createIssue(
         toLabel: childLabel,
       });
     }
+    const created = await ctx.db.get("issues", issueId);
+    if (created) {
+      await emitWebhook(ctx, {
+        workspaceId: project.workspaceId,
+        event: "Issue",
+        action: "create",
+        data: await issueWebhookData(ctx, created),
+      });
+    }
     return issueId;
 }
 
@@ -593,6 +618,8 @@ export const setParent = zMutation({
       parentId: nextParentId,
       updatedAt: Date.now(),
     });
+    const after = await ctx.db.get("issues", issue._id);
+    if (after) await publishIssueUpdate(ctx, issue, after);
     return issue._id;
   },
 });
@@ -781,6 +808,8 @@ export async function updateIssue(
       ...(args.dueDate !== undefined ? { dueDate: args.dueDate ?? undefined } : {}),
       ...(args.cycleId !== undefined ? { cycleId: args.cycleId ?? undefined } : {}),
     });
+    const after = await ctx.db.get("issues", issue._id);
+    if (after) await publishIssueUpdate(ctx, issue, after);
     return issue._id;
 }
 
@@ -864,12 +893,17 @@ export const move = zMutation({
     if (issue.workspaceId !== args.workspaceId || issue.projectId !== args.projectId) {
       throw new Error("Issue does not belong to that project");
     }
+    const statusChanged = args.status !== issue.status;
     await ctx.db.patch("issues", issue._id, {
       status: args.status,
       order: args.order,
       updatedAt: Date.now(),
       ...(args.status !== "triage" ? { snoozedUntil: undefined } : {}),
     });
+    if (statusChanged) {
+      const after = await ctx.db.get("issues", issue._id);
+      if (after) await publishIssueUpdate(ctx, issue, after);
+    }
     return issue._id;
   },
 });
@@ -878,6 +912,7 @@ export const remove = zMutation({
   args: { issueId: issueIdSchema },
   handler: async (ctx, args) => {
     const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
+    const removed = await issueWebhookData(ctx, issue);
     for (let pass = 0; pass < 10; pass += 1) {
       const comments = await ctx.db
         .query("comments")
@@ -928,6 +963,12 @@ export const remove = zMutation({
       }
     }
     await ctx.db.delete("issues", issue._id);
+    await emitWebhook(ctx, {
+      workspaceId: issue.workspaceId,
+      event: "Issue",
+      action: "remove",
+      data: removed,
+    });
     return issue._id;
   },
 });
