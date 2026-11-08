@@ -4,6 +4,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import UserAvatar from "@/components/user-avatar";
 import { formatRelative } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 
 type ActivityType =
@@ -79,14 +80,20 @@ function activitySentence(activity: {
   }
 }
 
-export default function IssueActivity({ issueId }: { issueId: Id<"issues"> }) {
+export default function IssueActivity({
+  issueId,
+  className,
+}: {
+  issueId: Id<"issues">;
+  className?: string;
+}) {
   const activities = useQuery(api.activities.list, { issueId });
 
   if (activities === undefined) {
     return (
-      <section className="mt-10">
-        <h2 className="mb-3 text-sm font-medium">Activity</h2>
-        <div className="space-y-3" aria-busy="true" aria-label="Loading activity">
+      <section className={cn("flex max-h-[6.25rem] min-h-0 shrink-0 flex-col overflow-hidden border-t border-border px-4 py-2 sm:px-6 lg:max-h-none lg:flex-1 lg:py-3", className)}>
+        <h2 className="mb-3 shrink-0 text-sm font-medium">Activity</h2>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto" aria-busy="true" aria-label="Loading activity">
           {Array.from({ length: 3 }, (_, index) => (
             <div key={index} className="flex items-center gap-2">
               <span className="size-5 animate-pulse rounded-full bg-muted" />
@@ -103,8 +110,8 @@ export default function IssueActivity({ issueId }: { issueId: Id<"issues"> }) {
   }
 
   return (
-    <section className="mt-10">
-      <div className="mb-3 flex items-center gap-2">
+    <section className={cn("flex max-h-[6.25rem] min-h-0 shrink-0 flex-col overflow-hidden border-t border-border px-4 py-2 sm:px-6 lg:max-h-none lg:flex-1 lg:py-3", className)}>
+      <div className="mb-3 flex shrink-0 items-center gap-2">
         <h2 className="text-sm font-medium">Activity</h2>
         <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
           <span className="size-1.5 rounded-full bg-emerald-400" />
@@ -112,7 +119,7 @@ export default function IssueActivity({ issueId }: { issueId: Id<"issues"> }) {
         </span>
       </div>
       <div
-        className="max-h-[min(16rem,36dvh)] space-y-3 overflow-y-auto overscroll-y-contain pr-1 [scrollbar-width:thin]"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain pr-1 [scrollbar-width:thin]"
         tabIndex={0}
         aria-label="Activity"
       >
