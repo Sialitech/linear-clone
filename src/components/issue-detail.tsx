@@ -175,7 +175,7 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
   const memberList = members ?? [];
 
   return (
-    <IssueContextMenu issue={issue}>
+    <IssueContextMenu issue={issue} className="flex h-full min-h-0 flex-col">
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex min-h-12 items-center gap-2 border-b border-border px-3 py-2 sm:gap-3 sm:px-4">
         {issue.parent ? (
@@ -198,21 +198,27 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
           </Button>
         </div>
       </header>
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto pb-[env(safe-area-inset-bottom)] lg:grid-cols-[minmax(0,1fr)_280px] lg:overflow-hidden lg:pb-0">
-        <div className="px-4 py-4 sm:px-6 sm:py-5 lg:min-h-0 lg:overflow-auto">
-          <InlineTitle issueId={id} title={issue.title} />
-          <InlineDescription issueId={id} description={issue.description ?? ""} />
-          <SubIssues issueId={id} projectId={issue.projectId} />
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden pb-[env(safe-area-inset-bottom)] lg:grid-cols-[minmax(0,1fr)_280px] lg:grid-rows-[minmax(0,1fr)] lg:pb-0">
+        <div className="flex min-h-0 flex-col overflow-hidden">
+          <div className="max-h-[min(24rem,58%)] min-h-0 shrink-0 overflow-y-auto overscroll-y-contain px-4 py-3 sm:px-6 sm:py-4">
+            <InlineTitle issueId={id} title={issue.title} />
+            <InlineDescription issueId={id} description={issue.description ?? ""} />
+            <SubIssues issueId={id} projectId={issue.projectId} />
+          </div>
           <IssueActivity issueId={id} />
-          <section className="mt-10">
-            <div className="mb-3 flex items-center gap-2">
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border px-4 py-2 sm:px-6 lg:py-3">
+            <div className="mb-3 flex shrink-0 items-center gap-2">
               <h2 className="text-sm font-medium">Comments</h2>
               <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                 <span className="size-1.5 rounded-full bg-emerald-400" />
                 Live
               </span>
             </div>
-            <div className="space-y-4">
+            <div
+              className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain pr-1 [scrollbar-width:thin]"
+              tabIndex={0}
+              aria-label="Comments"
+            >
               {comments?.map((item) => (
                 <article key={item._id} className="flex gap-2">
                   <UserAvatar user={item.author} />
@@ -290,20 +296,24 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
                 </article>
               ))}
             </div>
-            <form onSubmit={onComment} className="mt-4 space-y-2">
-              <MentionComposer
-                value={comment}
-                members={memberList}
-                pending={pendingMentions}
-                onChange={setComment}
-                onPendingChange={setPendingMentions}
-                placeholder="Leave a comment"
-              />
-              <Button type="submit" size="sm">Comment</Button>
+            <form onSubmit={onComment} className="mt-3 flex shrink-0 items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <MentionComposer
+                  value={comment}
+                  members={memberList}
+                  pending={pendingMentions}
+                  onChange={setComment}
+                  onPendingChange={setPendingMentions}
+                  placeholder="Leave a comment"
+                  menuPlacement="up"
+                  textareaClassName="max-h-24 min-h-10"
+                />
+              </div>
+              <Button type="submit" size="sm" className="mb-0.5 shrink-0">Comment</Button>
             </form>
           </section>
         </div>
-        <aside className="order-first border-b border-border px-3 py-3 lg:order-last lg:min-h-0 lg:overflow-auto lg:border-b-0 lg:border-l lg:px-4 lg:py-4">
+        <aside className="order-first max-h-[16dvh] min-h-0 overflow-y-auto overscroll-y-contain border-b border-border px-3 py-2 lg:order-last lg:max-h-none lg:border-b-0 lg:border-l lg:px-4 lg:py-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:gap-4 [&_button]:h-9 [&_button]:max-w-full [&_button]:shrink sm:[&_button]:h-7">
           <Field label="Status">
             <DropdownMenu>
@@ -512,7 +522,7 @@ function SubIssues({
   }
 
   return (
-    <section className="mt-8">
+    <section className="mt-4">
       <div className="mb-2 flex items-center gap-2">
         <h2 className="text-sm font-medium">Sub-issues</h2>
         <SubIssueProgress done={done} total={total} />
@@ -698,6 +708,8 @@ function MentionComposer({
   onChange,
   onPendingChange,
   placeholder,
+  menuPlacement = "down",
+  textareaClassName,
 }: {
   value: string;
   members: MentionMember[];
@@ -705,6 +717,8 @@ function MentionComposer({
   onChange: (value: string) => void;
   onPendingChange: (pending: PendingMention[]) => void;
   placeholder?: string;
+  menuPlacement?: "up" | "down";
+  textareaClassName?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
@@ -745,6 +759,7 @@ function MentionComposer({
         ref={textareaRef}
         value={value}
         placeholder={placeholder}
+        className={textareaClassName}
         onChange={(event) => {
           onChange(event.target.value);
           setCaret(event.target.selectionStart);
@@ -776,7 +791,10 @@ function MentionComposer({
       />
       {open ? (
         <ul
-          className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md"
+          className={cn(
+            "absolute z-20 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md",
+            menuPlacement === "up" ? "bottom-full mb-1" : "mt-1",
+          )}
           role="listbox"
         >
           {options.map((member, index) => (
@@ -906,7 +924,7 @@ function InlineDescription({
         setValue(event.target.value);
       }}
       onBlur={() => void save()}
-      className="mt-3 min-h-28 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-muted-foreground"
+      className="mt-2 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-muted-foreground lg:mt-3 lg:min-h-28"
     />
   );
 }

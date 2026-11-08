@@ -54,10 +54,12 @@ export default function IssueContextMenu({
   issue,
   children,
   enableTouchMenu = false,
+  className,
 }: {
   issue: IssueItem;
   children: ReactNode;
   enableTouchMenu?: boolean;
+  className?: string;
 }) {
   const router = useRouter();
   const { openEdit, openCreate, me } = useWorkspace();
@@ -322,7 +324,7 @@ export default function IssueContextMenu({
 
   return (
     <div
-      className="block"
+      className={className ?? "block"}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
