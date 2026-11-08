@@ -5,6 +5,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
 import IssueActivity from "@/components/issue-activity";
 import IssueContextMenu from "@/components/issue-context-menu";
+import MarkdownBody from "@/components/markdown-body";
+import MarkdownEditor from "@/components/markdown-editor";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
@@ -19,16 +21,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { dateInputToTimestamp, dateInputValue, errorMessage, formatDue, isOverdue } from "@/lib/format";
 import { issueBranchName } from "@/lib/github-branch";
+import { toggleTaskAt, type MentionMark } from "@/lib/markdown-edit";
 import {
   activeMentionIds,
   filterMembers,
   findMentionQuery,
   memberMentionLabel,
   mentionToken,
-  segmentCommentMentions,
   type MentionMember,
 } from "@/lib/mentions";
 import type { IssueItem } from "@/lib/types";
@@ -37,7 +38,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Copy, ExternalLink, Unlink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -53,6 +54,25 @@ const prUrlSchema = z
   );
 
 type PendingMention = { userId: Id<"users">; token: string };
+
+function submitOnModEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
+  if (!(event.metaKey || event.ctrlKey) || event.key !== "Enter") return;
+  event.preventDefault();
+  event.currentTarget.form?.requestSubmit();
+}
+
+function mentionMarks(mentionIds: Id<"users">[], members: MentionMember[]): MentionMark[] {
+  const byId = new Map(members.map((member) => [member._id, member]));
+  return mentionIds.flatMap((id) => {
+    const member = byId.get(id);
+    if (!member) return [];
+    return [{ userId: id, token: mentionToken(member) }];
+  });
+}
+
+function pendingMarks(pending: PendingMention[]): MentionMark[] {
+  return pending.map((item) => ({ userId: item.userId, token: item.token }));
+}
 
 export default function IssueDetail({ issueId, onClose }: { issueId: string; onClose?: () => void }) {
   const id = issueId as Id<"issues">;
@@ -280,17 +300,31 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
                           pending={editingMentions}
                           onChange={setEditingText}
                           onPendingChange={setEditingMentions}
+                          onKeyDown={submitOnModEnter}
+                          ariaLabel="Edit comment"
                         />
                         <Button type="submit" size="sm">Save</Button>
                       </form>
                     ) : (
-                      <p className="mt-1 text-sm whitespace-pre-wrap">
-                        <CommentBody
-                          content={item.content}
-                          mentionIds={item.mentionIds}
-                          members={memberList}
+                      <div className="mt-1">
+                        <MarkdownBody
+                          source={item.content}
+                          mentions={mentionMarks(item.mentionIds, memberList)}
+                          onToggleTask={
+                            item.author?._id === me?._id
+                              ? (index) => {
+                                  const next = toggleTaskAt(item.content, index);
+                                  if (next === item.content) return;
+                                  void updateComment({
+                                    commentId: item._id,
+                                    content: next,
+                                    mentionIds: item.mentionIds,
+                                  }).catch((error: unknown) => toast.error(errorMessage(error)));
+                                }
+                              : undefined
+                          }
                         />
-                      </p>
+                      </div>
                     )}
                   </div>
                 </article>
@@ -304,9 +338,11 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
                   pending={pendingMentions}
                   onChange={setComment}
                   onPendingChange={setPendingMentions}
-                  placeholder="Leave a comment"
+                  onKeyDown={submitOnModEnter}
+                  placeholder="Leave a comment. Markdown works here."
                   menuPlacement="up"
-                  textareaClassName="max-h-24 min-h-10"
+                  ariaLabel="Comment"
+                  areaClassName="max-h-28 min-h-16"
                 />
               </div>
               <Button type="submit" size="sm" className="mb-0.5 shrink-0">Comment</Button>
@@ -670,66 +706,40 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function CommentBody({
-  content,
-  mentionIds,
-  members,
-}: {
-  content: string;
-  mentionIds: Id<"users">[];
-  members: MentionMember[];
-}) {
-  const segments = useMemo(
-    () => segmentCommentMentions(content, mentionIds, members),
-    [content, mentionIds, members],
-  );
-  return (
-    <>
-      {segments.map((segment, index) =>
-        segment.type === "mention" ? (
-          <span
-            key={`${segment.userId}-${index}`}
-            className="rounded-sm bg-muted px-0.5 text-foreground"
-          >
-            {segment.value}
-          </span>
-        ) : (
-          <span key={`t-${index}`}>{segment.value}</span>
-        ),
-      )}
-    </>
-  );
-}
-
 function MentionComposer({
   value,
   members,
   pending,
   onChange,
   onPendingChange,
+  onKeyDown,
   placeholder,
   menuPlacement = "down",
-  textareaClassName,
+  ariaLabel,
+  areaClassName,
 }: {
   value: string;
   members: MentionMember[];
   pending: PendingMention[];
   onChange: (value: string) => void;
   onPendingChange: (pending: PendingMention[]) => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   placeholder?: string;
   menuPlacement?: "up" | "down";
-  textareaClassName?: string;
+  ariaLabel?: string;
+  areaClassName?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const [escaped, setEscaped] = useState(false);
+  const [mode, setMode] = useState<"write" | "preview">("write");
   const query = findMentionQuery(value, caret);
   const options = useMemo(
     () => (query ? filterMembers(members, query.query).slice(0, 8) : []),
     [members, query],
   );
-  const open = Boolean(query) && options.length > 0 && !escaped;
+  const open = mode === "write" && Boolean(query) && options.length > 0 && !escaped;
 
   function selectMember(member: MentionMember) {
     if (!query || !textareaRef.current) return;
@@ -753,41 +763,51 @@ function MentionComposer({
     });
   }
 
+  function onTextKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (open) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveIndex((index) => (index + 1) % options.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveIndex((index) => (index - 1 + options.length) % options.length);
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        const member = options[activeIndex];
+        if (member) selectMember(member);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setEscaped(true);
+        return;
+      }
+    }
+    onKeyDown?.(event);
+  }
+
   return (
     <div className="relative">
-      <Textarea
-        ref={textareaRef}
+      <MarkdownEditor
         value={value}
+        mentions={pendingMarks(pending)}
         placeholder={placeholder}
-        className={textareaClassName}
-        onChange={(event) => {
-          onChange(event.target.value);
-          setCaret(event.target.selectionStart);
+        ariaLabel={ariaLabel}
+        areaClassName={areaClassName}
+        textareaRef={textareaRef}
+        onModeChange={setMode}
+        onChange={(next) => {
+          onChange(next);
           setActiveIndex(0);
           setEscaped(false);
         }}
-        onClick={(event) => {
-          setCaret(event.currentTarget.selectionStart);
-          setEscaped(false);
-        }}
-        onKeyUp={(event) => setCaret(event.currentTarget.selectionStart)}
-        onKeyDown={(event) => {
-          if (!open) return;
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setActiveIndex((index) => (index + 1) % options.length);
-          } else if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setActiveIndex((index) => (index - 1 + options.length) % options.length);
-          } else if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            const member = options[activeIndex];
-            if (member) selectMember(member);
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            setEscaped(true);
-          }
-        }}
+        onCaretChange={setCaret}
+        onTextPointerDown={() => setEscaped(false)}
+        onKeyDown={onTextKeyDown}
       />
       {open ? (
         <ul
@@ -894,37 +914,90 @@ function InlineDescription({
   description: string;
 }) {
   const update = useMutation(api.issues.update);
+  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(description);
-  const dirty = useRef(false);
+  const saving = useRef(false);
 
   useEffect(() => {
-    if (!dirty.current) setValue(description);
-  }, [description]);
+    if (!editing) setValue(description);
+  }, [description, editing]);
 
-  async function save() {
-    if (value === description) {
-      dirty.current = false;
+  async function save(next: string) {
+    if (saving.current) return;
+    if (next === description) {
+      setEditing(false);
       return;
     }
+    saving.current = true;
     try {
-      await update({ issueId, description: value });
-      dirty.current = false;
+      await update({ issueId, description: next });
+      setEditing(false);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      saving.current = false;
+    }
+  }
+
+  async function toggleTask(index: number) {
+    const next = toggleTaskAt(description, index);
+    if (next === description) return;
+    try {
+      await update({ issueId, description: next });
     } catch (error) {
       toast.error(errorMessage(error));
     }
   }
 
+  if (!editing) {
+    return (
+      <div className="mt-2 lg:mt-3">
+        {description.trim() ? (
+          <MarkdownBody source={description} onToggleTask={(index) => void toggleTask(index)} />
+        ) : (
+          <p className="text-sm text-muted-foreground">No description yet.</p>
+        )}
+        <button
+          type="button"
+          className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            setValue(description);
+            setEditing(true);
+          }}
+        >
+          {description.trim() ? "Edit description" : "Add description"}
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <textarea
-      aria-label="Description"
-      value={value}
-      placeholder="Add description"
-      onChange={(event) => {
-        dirty.current = true;
-        setValue(event.target.value);
-      }}
-      onBlur={() => void save()}
-      className="mt-2 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-muted-foreground lg:mt-3 lg:min-h-28"
-    />
+    <div className="mt-2 space-y-2 lg:mt-3">
+      <MarkdownEditor
+        value={value}
+        onChange={setValue}
+        placeholder="Write in Markdown…"
+        ariaLabel="Description"
+        autoFocus
+        onSubmit={() => void save(value)}
+      />
+      <div className="flex items-center gap-2">
+        <Button type="button" size="sm" onClick={() => void save(value)}>
+          Save
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setValue(description);
+            setEditing(false);
+          }}
+        >
+          Cancel
+        </Button>
+        <span className="text-[11px] text-muted-foreground">⌘/Ctrl+Enter to save</span>
+      </div>
+    </div>
   );
 }
