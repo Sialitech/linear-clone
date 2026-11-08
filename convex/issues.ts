@@ -1,5 +1,5 @@
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { z } from "zod";
 import {
   loadPublicUser,
@@ -30,6 +30,8 @@ import {
   zQuery,
 } from "./lib/functions";
 import { toSearchText } from "./lib/keys";
+import { issueChangeEvents } from "./lib/webhookEvents";
+import { emitWebhookEvents, issueWebhookData, type WebhookNotice } from "./lib/webhooks";
 import { isWorkflowStatus, splitTriage, TRIAGE_ACTIONS, WORKFLOW_STATUSES } from "./model";
 
 const labelIdsSchema = z.array(labelIdSchema).max(12);
@@ -69,6 +71,21 @@ const MAX_PARENT_DEPTH = 6;
 async function issueIdentifier(ctx: ReadCtx, issue: Doc<"issues">) {
   const project = await ctx.db.get("projects", issue.projectId);
   return `${project?.key ?? "ISS"}-${issue.number}`;
+}
+
+async function publishIssueUpdate(ctx: MutationCtx, before: Doc<"issues">, after: Doc<"issues">) {
+  const previous = await issueWebhookData(ctx, before);
+  const next = await issueWebhookData(ctx, after);
+  const changes = issueChangeEvents(previous, next);
+  await emitWebhookEvents(ctx, {
+    workspaceId: after.workspaceId,
+    notifications: changes.map((change) => ({
+      event: change.event,
+      action: "update",
+      data: next,
+      updatedFrom: change.updatedFrom,
+    })),
+  });
 }
 
 async function assertParent(
@@ -521,6 +538,20 @@ export async function createIssue(
         toLabel: childLabel,
       });
     }
+    const created = await ctx.db.get("issues", issueId);
+    if (created) {
+      const data = await issueWebhookData(ctx, created);
+      const notifications: WebhookNotice[] = [{ event: "issue.created", action: "create", data }];
+      if (parent) {
+        notifications.push({
+          event: "issue.sub_issue_added",
+          action: "update",
+          data: await issueWebhookData(ctx, parent),
+          related: { id: created._id, identifier: data.identifier },
+        });
+      }
+      await emitWebhookEvents(ctx, { workspaceId: project.workspaceId, notifications });
+    }
     return issueId;
 }
 
@@ -593,6 +624,40 @@ export const setParent = zMutation({
       parentId: nextParentId,
       updatedAt: Date.now(),
     });
+    const after = await ctx.db.get("issues", issue._id);
+    const notifications: WebhookNotice[] = [];
+    if (after) {
+      const previous = await issueWebhookData(ctx, issue);
+      const next = await issueWebhookData(ctx, after);
+      for (const change of issueChangeEvents(previous, next)) {
+        notifications.push({
+          event: change.event,
+          action: "update",
+          data: next,
+          updatedFrom: change.updatedFrom,
+        });
+      }
+    }
+    if (issue.parentId) {
+      const previousParent = await ctx.db.get("issues", issue.parentId);
+      if (previousParent) {
+        notifications.push({
+          event: "issue.sub_issue_removed",
+          action: "update",
+          data: await issueWebhookData(ctx, previousParent),
+          related: { id: issue._id, identifier: childLabel },
+        });
+      }
+    }
+    if (nextParent) {
+      notifications.push({
+        event: "issue.sub_issue_added",
+        action: "update",
+        data: await issueWebhookData(ctx, nextParent),
+        related: { id: issue._id, identifier: childLabel },
+      });
+    }
+    await emitWebhookEvents(ctx, { workspaceId: issue.workspaceId, notifications });
     return issue._id;
   },
 });
@@ -781,6 +846,8 @@ export async function updateIssue(
       ...(args.dueDate !== undefined ? { dueDate: args.dueDate ?? undefined } : {}),
       ...(args.cycleId !== undefined ? { cycleId: args.cycleId ?? undefined } : {}),
     });
+    const after = await ctx.db.get("issues", issue._id);
+    if (after) await publishIssueUpdate(ctx, issue, after);
     return issue._id;
 }
 
@@ -864,12 +931,17 @@ export const move = zMutation({
     if (issue.workspaceId !== args.workspaceId || issue.projectId !== args.projectId) {
       throw new Error("Issue does not belong to that project");
     }
+    const statusChanged = args.status !== issue.status;
     await ctx.db.patch("issues", issue._id, {
       status: args.status,
       order: args.order,
       updatedAt: Date.now(),
       ...(args.status !== "triage" ? { snoozedUntil: undefined } : {}),
     });
+    if (statusChanged) {
+      const after = await ctx.db.get("issues", issue._id);
+      if (after) await publishIssueUpdate(ctx, issue, after);
+    }
     return issue._id;
   },
 });
@@ -878,6 +950,7 @@ export const remove = zMutation({
   args: { issueId: issueIdSchema },
   handler: async (ctx, args) => {
     const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
+    const removed = await issueWebhookData(ctx, issue);
     for (let pass = 0; pass < 10; pass += 1) {
       const comments = await ctx.db
         .query("comments")
@@ -912,9 +985,20 @@ export const remove = zMutation({
       .query("issues")
       .withIndex("by_parent", (q) => q.eq("parentId", issue._id))
       .take(100);
+    const childNotices: WebhookNotice[] = [];
     for (const child of childrenOf) {
       await ctx.db.patch("issues", child._id, { parentId: undefined, updatedAt: Date.now() });
+      const cleared = await ctx.db.get("issues", child._id);
+      if (cleared) {
+        childNotices.push({
+          event: "issue.parent_cleared",
+          action: "update",
+          data: await issueWebhookData(ctx, cleared),
+          updatedFrom: { parentId: issue._id },
+        });
+      }
     }
+    const parentNotice: WebhookNotice[] = [];
     if (issue.parentId) {
       const parent = await ctx.db.get("issues", issue.parentId);
       if (parent) {
@@ -923,11 +1007,25 @@ export const remove = zMutation({
           workspaceId: issue.workspaceId,
           actorId: userId,
           type: "sub_issue_removed",
-          fromLabel: await issueIdentifier(ctx, issue),
+          fromLabel: removed.identifier,
+        });
+        parentNotice.push({
+          event: "issue.sub_issue_removed",
+          action: "update",
+          data: await issueWebhookData(ctx, parent),
+          related: { id: issue._id, identifier: removed.identifier },
         });
       }
     }
     await ctx.db.delete("issues", issue._id);
+    await emitWebhookEvents(ctx, {
+      workspaceId: issue.workspaceId,
+      notifications: [
+        { event: "issue.deleted", action: "remove", data: removed },
+        ...childNotices,
+        ...parentNotice,
+      ],
+    });
     return issue._id;
   },
 });

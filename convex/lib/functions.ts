@@ -41,3 +41,4 @@ export const viewIdSchema = zid("views");
 export const pullRequestIdSchema = zid("pullRequests");
 export const projectRepoIdSchema = zid("projectRepos");
 export const cycleIdSchema = zid("cycles");
+export const webhookIdSchema = zid("webhooks");

@@ -3,6 +3,8 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { z } from "zod";
 import { loadPublicUser, requireIssueAccess, type ReadCtx } from "./lib/access";
 import { recordActivity } from "./lib/activity";
+import { commentChangeEvents } from "./lib/webhookEvents";
+import { commentWebhookData, emitWebhookEvents } from "./lib/webhooks";
 import {
   commentIdSchema,
   issueIdSchema,
@@ -130,6 +132,22 @@ export async function createComment(
       actorId: userId,
       type: "comment_added",
     });
+    await emitWebhookEvents(ctx, {
+      workspaceId: issue.workspaceId,
+      notifications: [
+        {
+          event: "comment.created",
+          action: "create",
+          data: commentWebhookData({
+            _id: commentId,
+            issueId: args.issueId,
+            authorId: userId,
+            content: args.content,
+            mentionIds,
+          }),
+        },
+      ],
+    });
     return commentId;
 }
 
@@ -165,6 +183,7 @@ export async function updateComment(
     if (args.content === comment.content && mentionsUnchanged) {
       return comment._id;
     }
+    const before = commentWebhookData(comment);
     await ctx.db.patch("comments", comment._id, {
       content: args.content,
       mentionIds,
@@ -187,6 +206,20 @@ export async function updateComment(
         type: "comment_edited",
       });
     }
+    const after = commentWebhookData({
+      ...comment,
+      content: args.content,
+      mentionIds,
+    });
+    await emitWebhookEvents(ctx, {
+      workspaceId: issue.workspaceId,
+      notifications: commentChangeEvents(before, after).map((change) => ({
+        event: change.event,
+        action: "update" as const,
+        data: after,
+        updatedFrom: change.updatedFrom,
+      })),
+    });
     return comment._id;
 }
 
@@ -207,6 +240,7 @@ export async function removeComment(ctx: MutationCtx, commentId: Id<"comments">)
     if (comment.authorId !== userId && !canModerate) {
       throw new Error("You can only delete your own comments");
     }
+    const removed = commentWebhookData(comment);
     await deleteMentionsForComment(ctx, comment._id);
     await ctx.db.delete("comments", comment._id);
     await recordActivity(ctx, {
@@ -214,6 +248,10 @@ export async function removeComment(ctx: MutationCtx, commentId: Id<"comments">)
       workspaceId: issue.workspaceId,
       actorId: userId,
       type: "comment_deleted",
+    });
+    await emitWebhookEvents(ctx, {
+      workspaceId: issue.workspaceId,
+      notifications: [{ event: "comment.deleted", action: "remove", data: removed }],
     });
     return comment._id;
 }

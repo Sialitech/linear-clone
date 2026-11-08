@@ -291,6 +291,31 @@ export default defineSchema({
   })
     .index("by_hash", ["tokenHash"])
     .index("by_workspace_and_user", ["workspaceId", "userId"]),
+  webhooks: defineTable({
+    workspaceId: v.id("workspaces"),
+    createdBy: v.id("users"),
+    label: v.string(),
+    url: v.string(),
+    secret: v.string(),
+    enabled: v.boolean(),
+    // Event ids from webhookEvents, plus legacy "Issue" and "Comment".
+    resources: v.array(v.string()),
+    createdAt: v.number(),
+    consecutiveFailures: v.number(),
+    disabledReason: v.optional(v.string()),
+  }).index("by_workspace", ["workspaceId"]),
+  webhookDeliveries: defineTable({
+    webhookId: v.id("webhooks"),
+    workspaceId: v.id("workspaces"),
+    event: v.string(),
+    action: v.union(v.literal("create"), v.literal("update"), v.literal("remove")),
+    body: v.string(),
+    status: v.union(v.literal("pending"), v.literal("succeeded"), v.literal("failed")),
+    attempts: v.number(),
+    httpStatus: v.optional(v.number()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_webhook", ["webhookId"]),
   pullRequests: defineTable({
     workspaceId: v.id("workspaces"),
     issueId: v.id("issues"),
