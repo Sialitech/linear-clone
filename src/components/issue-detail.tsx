@@ -175,7 +175,7 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
   const memberList = members ?? [];
 
   return (
-    <IssueContextMenu issue={issue}>
+    <IssueContextMenu issue={issue} className="flex h-full min-h-0 flex-col">
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex min-h-12 items-center gap-2 border-b border-border px-3 py-2 sm:gap-3 sm:px-4">
         {issue.parent ? (
@@ -198,8 +198,8 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
           </Button>
         </div>
       </header>
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto pb-[env(safe-area-inset-bottom)] lg:grid-cols-[minmax(0,1fr)_280px] lg:overflow-hidden lg:pb-0">
-        <div className="px-4 py-4 sm:px-6 sm:py-5 lg:min-h-0 lg:overflow-auto">
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)] lg:grid-cols-[minmax(0,1fr)_280px] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden lg:pb-0">
+        <div className="px-4 py-4 sm:px-6 sm:py-5 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain">
           <InlineTitle issueId={id} title={issue.title} />
           <InlineDescription issueId={id} description={issue.description ?? ""} />
           <SubIssues issueId={id} projectId={issue.projectId} />
@@ -212,7 +212,11 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
                 Live
               </span>
             </div>
-            <div className="space-y-4">
+            <div
+              className="max-h-[min(16rem,36dvh)] space-y-4 overflow-y-auto overscroll-y-contain pr-1 [scrollbar-width:thin]"
+              tabIndex={0}
+              aria-label="Comments"
+            >
               {comments?.map((item) => (
                 <article key={item._id} className="flex gap-2">
                   <UserAvatar user={item.author} />
@@ -298,12 +302,13 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
                 onChange={setComment}
                 onPendingChange={setPendingMentions}
                 placeholder="Leave a comment"
+                menuPlacement="up"
               />
               <Button type="submit" size="sm">Comment</Button>
             </form>
           </section>
         </div>
-        <aside className="order-first border-b border-border px-3 py-3 lg:order-last lg:min-h-0 lg:overflow-auto lg:border-b-0 lg:border-l lg:px-4 lg:py-4">
+        <aside className="order-first border-b border-border px-3 py-3 lg:order-last lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain lg:border-b-0 lg:border-l lg:px-4 lg:py-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:gap-4 [&_button]:h-9 [&_button]:max-w-full [&_button]:shrink sm:[&_button]:h-7">
           <Field label="Status">
             <DropdownMenu>
@@ -698,6 +703,7 @@ function MentionComposer({
   onChange,
   onPendingChange,
   placeholder,
+  menuPlacement = "down",
 }: {
   value: string;
   members: MentionMember[];
@@ -705,6 +711,7 @@ function MentionComposer({
   onChange: (value: string) => void;
   onPendingChange: (pending: PendingMention[]) => void;
   placeholder?: string;
+  menuPlacement?: "up" | "down";
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
@@ -776,7 +783,10 @@ function MentionComposer({
       />
       {open ? (
         <ul
-          className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md"
+          className={cn(
+            "absolute z-20 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md",
+            menuPlacement === "up" ? "bottom-full mb-1" : "mt-1",
+          )}
           role="listbox"
         >
           {options.map((member, index) => (

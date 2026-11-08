@@ -111,7 +111,11 @@ export default function IssueActivity({ issueId }: { issueId: Id<"issues"> }) {
           Live
         </span>
       </div>
-      <div className="space-y-3">
+      <div
+        className="max-h-[min(16rem,36dvh)] space-y-3 overflow-y-auto overscroll-y-contain pr-1 [scrollbar-width:thin]"
+        tabIndex={0}
+        aria-label="Activity"
+      >
         {activities.map((item) => {
           const name = item.actor?.name || item.actor?.email || "Someone";
           return (
