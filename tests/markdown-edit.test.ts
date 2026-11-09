@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  findSlashQuery,
   insertLink,
+  looksLikeMarkdown,
+  shouldParsePasteAsMarkdown,
   safeMarkdownUrl,
+  sanitizeStoredMarkdown,
+  shortenedAutolinkLabel,
+  shortenUrl,
   splitMentions,
   toggleOrderedList,
   togglePrefix,
@@ -81,6 +87,26 @@ describe("toggleTaskAt", () => {
   });
 });
 
+describe("short links", () => {
+  const run =
+    "http://10.10.10.122:8888/tenants/707d0855-80ab-4e1f-a156-f1c4546cbf52/runs/ae827215-01ec-4cb5-981c-92dea4035637";
+
+  it("keeps the host and the start of the last segment", () => {
+    assert.equal(shortenUrl(run), "10.10.10.122:8888/…/ae827215");
+    assert.equal(shortenUrl("https://www.example.com/docs"), "example.com/docs");
+    assert.equal(shortenUrl("https://example.com"), "example.com");
+    assert.equal(shortenUrl("https://example.com/a/b?x=1"), "example.com/…/b…");
+    assert.equal(shortenUrl("mailto:ada@example.com"), "ada@example.com");
+  });
+
+  it("shortens autolinks and keeps labels an author wrote", () => {
+    assert.equal(shortenedAutolinkLabel(run, run), "10.10.10.122:8888/…/ae827215");
+    assert.equal(shortenedAutolinkLabel("https://example.com/docs/", "https://example.com/docs"), "example.com/docs");
+    assert.equal(shortenedAutolinkLabel(run, "run log"), null);
+    assert.equal(shortenedAutolinkLabel("https://example.com", "example.com"), null);
+  });
+});
+
 describe("safeMarkdownUrl", () => {
   it("keeps http, relative, mailto, and mention urls", () => {
     assert.equal(safeMarkdownUrl("https://example.com/a"), "https://example.com/a");
@@ -116,5 +142,42 @@ describe("splitMentions", () => {
 
   it("does not match a prefix of a longer word", () => {
     assert.deepEqual(splitMentions("@AdaLovelace", [ada]), [{ type: "text", value: "@AdaLovelace" }]);
+  });
+});
+
+describe("slash queries", () => {
+  it("reads a command at the start of a block", () => {
+    assert.deepEqual(findSlashQuery("/to", 3), { query: "to", start: 0, end: 3 });
+  });
+
+  it("reads a command after whitespace and ignores mid-word slashes", () => {
+    assert.deepEqual(findSlashQuery("hello /li", 9), { query: "li", start: 6, end: 9 });
+    assert.equal(findSlashQuery("https://ex", 10), null);
+    assert.equal(findSlashQuery("path/name", 9), null);
+  });
+});
+
+describe("stored markdown", () => {
+  it("strips unsafe link targets and keeps safe ones", () => {
+    assert.equal(sanitizeStoredMarkdown("[click](javascript:alert(1))"), "click");
+    assert.equal(
+      sanitizeStoredMarkdown("[docs](https://example.com/docs)"),
+      "[docs](https://example.com/docs)",
+    );
+    assert.equal(sanitizeStoredMarkdown("<javascript:alert(1)>"), "");
+  });
+
+  it("detects markdown worth parsing on paste", () => {
+    assert.equal(looksLikeMarkdown("## Ship it"), true);
+    assert.equal(looksLikeMarkdown("just a sentence"), false);
+    assert.equal(looksLikeMarkdown("see [docs](https://example.com)"), true);
+  });
+
+  it("parses markdown pastes that browsers wrap in paragraphs", () => {
+    const note = "**Falló `run-agent`:**\n\n> timeout";
+    assert.equal(shouldParsePasteAsMarkdown(note, ""), true);
+    assert.equal(shouldParsePasteAsMarkdown(note, "<p>**Falló `run-agent`:**</p><p>&gt; timeout</p>"), true);
+    assert.equal(shouldParsePasteAsMarkdown(note, "<p><strong>Falló</strong> <code>run-agent</code></p>"), false);
+    assert.equal(shouldParsePasteAsMarkdown("just a sentence", "<p>just a sentence</p>"), false);
   });
 });

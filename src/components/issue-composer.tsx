@@ -483,9 +483,10 @@ export default function IssueComposer() {
             <MarkdownEditor
               value={draft.description}
               onChange={(description) => setDraft((current) => ({ ...current, description }))}
-              placeholder="Add a description. Markdown works here."
+              placeholder="Add a description…"
               ariaLabel="Description"
               tone="on-dark"
+              variant="plain"
               areaClassName={expanded ? "min-h-[36vh]" : "min-h-24"}
             />
           </div>

@@ -20,6 +20,149 @@ const SAFE_PROTOCOL = /^(https?|ircs?|mailto|xmpp)$/i;
 const TASK_LINE = /^(\s*(?:>\s*)*(?:[-*+]|\d+\.)\s+)\[([ xX])\]/;
 const FENCE = /^ {0,3}(```+|~~~+)/;
 
+const MARKDOWN_HINT =
+  /(^|\n)\s{0,3}(#{1,6}\s|```|~~~|[-*+]\s|\d+\.\s|>\s)|\[[^\]]+\]\([^)\s]+\)|!\[[^\]]*\]\([^)\s]+\)|\*\*[^*\n]+\*\*|~~[^~\n]+~~|`[^`\n]+`/;
+
+/** True when pasted plain text is worth parsing as Markdown instead of literal text. */
+export function looksLikeMarkdown(text: string) {
+  return text.length > 1 && MARKDOWN_HINT.test(text);
+}
+
+/**
+ * Parse a paste as Markdown when the plain text looks like Markdown.
+ * Browsers wrap plain text in paragraphs; that wrapper is not rich formatting.
+ * Real formatting (bold, links, lists, code) is left to the editor's HTML paste.
+ */
+export function shouldParsePasteAsMarkdown(text: string, html: string) {
+  if (!looksLikeMarkdown(text)) return false;
+  if (!html) return true;
+  return !/<(?:strong|em|b|i|a|ul|ol|table|h[1-6]|li|code|pre|blockquote)\b/i.test(html);
+}
+
+/** Drop unsafe link targets before Markdown is stored. */
+export function sanitizeStoredMarkdown(markdown: string) {
+  let result = "";
+  for (let i = 0; i < markdown.length; i += 1) {
+    if (markdown[i] !== "[") {
+      result += markdown[i];
+      continue;
+    }
+    const labelEnd = markdown.indexOf("](", i + 1);
+    const label = markdown.slice(i + 1, labelEnd);
+    if (labelEnd === -1 || label.includes("\n") || label.includes("[")) {
+      result += markdown[i];
+      continue;
+    }
+    const urlStart = labelEnd + 2;
+    let depth = 1;
+    let end = urlStart;
+    for (; end < markdown.length; end += 1) {
+      const char = markdown[end];
+      if (char === "(") depth += 1;
+      else if (char === ")") {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    if (depth !== 0) {
+      result += markdown[i];
+      continue;
+    }
+    const raw = markdown.slice(urlStart, end).trim();
+    const dest = raw.startsWith("<") && raw.includes(">") ? raw.slice(1, raw.indexOf(">")) : (raw.split(/\s+/)[0] ?? raw);
+    const safe = safeMarkdownUrl(dest);
+    if (!safe) result += label;
+    else if (safe === dest) result += markdown.slice(i, end + 1);
+    else result += `[${label}](${safe})`;
+    i = end;
+  }
+  return result.replace(/<(?:javascript|data|vbscript):[^>]*>/gi, "");
+}
+
+/** Slash command typed at the start of a block or after whitespace. */
+export function findSlashQuery(text: string, caret: number) {
+  const before = text.slice(0, Math.max(0, caret));
+  const match = before.match(/(^|\s)\/([^\s/]*)$/);
+  if (!match) return null;
+  const query = match[2] ?? "";
+  const start = before.length - query.length - 1;
+  return { query, start, end: before.length };
+}
+
+/** Short label for a long URL. The full address stays on the link itself. */
+export function shortenUrl(href: string) {
+  if (href.startsWith("mailto:")) return clipEnd(href.slice("mailto:".length).split("?")[0] ?? href, 32);
+  if (href.startsWith("/") && !href.startsWith("//")) return shortenPath(href);
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return clipMiddle(href, 42);
+  }
+  if (url.protocol === "mailto:") return clipEnd(url.pathname, 32);
+  const host = url.host.replace(/^www\./, "");
+  const parts = url.pathname.split("/").filter(Boolean).map(decodePart);
+  const query = url.search || url.hash ? "…" : "";
+  if (parts.length === 0) return host + query;
+  const tail = clipTail(parts[parts.length - 1] ?? "");
+  if (parts.length === 1) return `${host}/${tail}${query}`;
+  return `${host}/…/${tail}${query}`;
+}
+
+/**
+ * Label to show when the link text is the URL itself.
+ * Author-written labels such as `[docs](url)` stay as written.
+ */
+export function shortenedAutolinkLabel(href: string, text: string) {
+  const compact = text.replace(/\s+/g, "");
+  if (!compact || !sameUrl(href, compact)) return null;
+  const short = shortenUrl(href);
+  return short === compact ? null : short;
+}
+
+function sameUrl(href: string, text: string) {
+  const bare = (value: string) => value.replace(/\/$/, "");
+  const withoutProtocol = href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  const mail = href.startsWith("mailto:") ? href.slice("mailto:".length).split("?")[0] : "";
+  const forms = [href, bare(href), withoutProtocol, bare(withoutProtocol), mail].filter(Boolean);
+  return forms.includes(text) || forms.includes(bare(text));
+}
+
+function shortenPath(href: string) {
+  const hash = href.search(/[?#]/);
+  const path = hash === -1 ? href : href.slice(0, hash);
+  const extra = hash === -1 ? "" : "…";
+  const parts = path.split("/").filter(Boolean).map(decodePart);
+  if (parts.length <= 2 && href.length <= 48) return href;
+  const head = parts[0] ? `/${parts[0]}` : "";
+  const tail = clipTail(parts[parts.length - 1] ?? "");
+  return `${head}/…/${tail}${extra}`;
+}
+
+function clipTail(value: string) {
+  return value.length > 18 ? value.slice(0, 8) : value;
+}
+
+function clipEnd(value: string, max: number) {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
+}
+
+function clipMiddle(value: string, max: number) {
+  if (value.length <= max) return value;
+  const tail = Math.floor((max - 1) / 2);
+  const head = max - 1 - tail;
+  return `${value.slice(0, head)}…${value.slice(value.length - tail)}`;
+}
+
+function decodePart(part: string) {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
+}
+
 export function safeMarkdownUrl(url: string) {
   if (url.startsWith("mention:")) return url;
   if (url.startsWith("//")) return "";

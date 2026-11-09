@@ -6,7 +6,7 @@ import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
 import IssueActivity from "@/components/issue-activity";
 import IssueContextMenu from "@/components/issue-context-menu";
 import MarkdownBody from "@/components/markdown-body";
-import MarkdownEditor from "@/components/markdown-editor";
+import MarkdownEditor, { type EditorCaret } from "@/components/markdown-editor";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
@@ -38,7 +38,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Copy, ExternalLink, Unlink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -54,12 +54,6 @@ const prUrlSchema = z
   );
 
 type PendingMention = { userId: Id<"users">; token: string };
-
-function submitOnModEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
-  if (!(event.metaKey || event.ctrlKey) || event.key !== "Enter") return;
-  event.preventDefault();
-  event.currentTarget.form?.requestSubmit();
-}
 
 function mentionMarks(mentionIds: Id<"users">[], members: MentionMember[]): MentionMark[] {
   const byId = new Map(members.map((member) => [member._id, member]));
@@ -222,7 +216,7 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
         <div className="flex min-h-0 flex-col overflow-hidden">
           <div className="max-h-[min(24rem,58%)] min-h-0 shrink-0 overflow-y-auto overscroll-y-contain px-4 py-3 sm:px-6 sm:py-4">
             <InlineTitle issueId={id} title={issue.title} />
-            <InlineDescription issueId={id} description={issue.description ?? ""} />
+            <InlineDescription key={id} issueId={id} description={issue.description ?? ""} />
             <SubIssues issueId={id} projectId={issue.projectId} />
           </div>
           <IssueActivity issueId={id} />
@@ -300,7 +294,6 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
                           pending={editingMentions}
                           onChange={setEditingText}
                           onPendingChange={setEditingMentions}
-                          onKeyDown={submitOnModEnter}
                           ariaLabel="Edit comment"
                         />
                         <Button type="submit" size="sm">Save</Button>
@@ -338,11 +331,9 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
                   pending={pendingMentions}
                   onChange={setComment}
                   onPendingChange={setPendingMentions}
-                  onKeyDown={submitOnModEnter}
-                  placeholder="Leave a comment. Markdown works here."
+                  placeholder="Leave a comment…"
                   menuPlacement="up"
                   ariaLabel="Comment"
-                  areaClassName="max-h-28 min-h-16"
                 />
               </div>
               <Button type="submit" size="sm" className="mb-0.5 shrink-0">Comment</Button>
@@ -712,7 +703,6 @@ function MentionComposer({
   pending,
   onChange,
   onPendingChange,
-  onKeyDown,
   placeholder,
   menuPlacement = "down",
   ariaLabel,
@@ -723,71 +713,55 @@ function MentionComposer({
   pending: PendingMention[];
   onChange: (value: string) => void;
   onPendingChange: (pending: PendingMention[]) => void;
-  onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   placeholder?: string;
   menuPlacement?: "up" | "down";
   ariaLabel?: string;
   areaClassName?: string;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [caret, setCaret] = useState(0);
+  const [caret, setCaret] = useState<EditorCaret | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [escaped, setEscaped] = useState(false);
-  const [mode, setMode] = useState<"write" | "preview">("write");
-  const query = findMentionQuery(value, caret);
+  const query = caret ? findMentionQuery(caret.blockText, caret.caret) : null;
   const options = useMemo(
     () => (query ? filterMembers(members, query.query).slice(0, 8) : []),
     [members, query],
   );
-  const open = mode === "write" && Boolean(query) && options.length > 0 && !escaped;
+  const open = Boolean(query) && options.length > 0 && !escaped;
 
   function selectMember(member: MentionMember) {
-    if (!query || !textareaRef.current) return;
+    if (!query || !caret) return;
     const token = mentionToken(member);
-    const before = value.slice(0, query.start);
-    const after = value.slice(query.end);
-    const next = `${before}${token} ${after}`;
-    const nextCaret = before.length + token.length + 1;
-    onChange(next);
+    caret.replace(query.start, query.end, `${token} `);
     onPendingChange([
       ...pending.filter((item) => item.userId !== member._id),
       { userId: member._id, token },
     ]);
     setActiveIndex(0);
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(nextCaret, nextCaret);
-      setCaret(nextCaret);
-    });
+    setEscaped(false);
   }
 
-  function onTextKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (open) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setActiveIndex((index) => (index + 1) % options.length);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setActiveIndex((index) => (index - 1 + options.length) % options.length);
-        return;
-      }
-      if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault();
-        const member = options[activeIndex];
-        if (member) selectMember(member);
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setEscaped(true);
-        return;
-      }
+  function onTextKeyDown(event: KeyboardEvent) {
+    if (!open) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((index) => (index + 1) % options.length);
+      return;
     }
-    onKeyDown?.(event);
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index) => (index - 1 + options.length) % options.length);
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      event.preventDefault();
+      const member = options[activeIndex];
+      if (member) selectMember(member);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setEscaped(true);
+    }
   }
 
   return (
@@ -798,15 +772,14 @@ function MentionComposer({
         placeholder={placeholder}
         ariaLabel={ariaLabel}
         areaClassName={areaClassName}
-        textareaRef={textareaRef}
-        onModeChange={setMode}
+        variant="field"
         onChange={(next) => {
           onChange(next);
           setActiveIndex(0);
           setEscaped(false);
         }}
-        onCaretChange={setCaret}
-        onTextPointerDown={() => setEscaped(false)}
+        onCaretContext={setCaret}
+        onPointerDown={() => setEscaped(false)}
         onKeyDown={onTextKeyDown}
       />
       {open ? (
@@ -914,90 +887,85 @@ function InlineDescription({
   description: string;
 }) {
   const update = useMutation(api.issues.update);
-  const [editing, setEditing] = useState(false);
+  const latest = useRef(description);
+  const saved = useRef(description);
+  const writing = useRef(false);
+  const queued = useRef<string | null>(null);
+  const timer = useRef<number | null>(null);
+  const updateRef = useRef(update);
+  const issueRef = useRef(issueId);
   const [value, setValue] = useState(description);
-  const saving = useRef(false);
+  updateRef.current = update;
+  issueRef.current = issueId;
 
   useEffect(() => {
-    if (!editing) setValue(description);
-  }, [description, editing]);
+    if (latest.current !== saved.current) return;
+    latest.current = description;
+    saved.current = description;
+    setValue(description);
+  }, [description]);
 
-  async function save(next: string) {
-    if (saving.current) return;
-    if (next === description) {
-      setEditing(false);
-      return;
-    }
-    saving.current = true;
+  useEffect(() => {
+    return () => {
+      if (timer.current) window.clearTimeout(timer.current);
+      const next = latest.current;
+      if (next !== saved.current && next.length <= 20000) {
+        void updateRef.current({ issueId: issueRef.current, description: next }).catch(() => undefined);
+      }
+    };
+  }, []);
+
+  async function persist(next: string) {
+    queued.current = next;
+    if (writing.current) return;
+    writing.current = true;
     try {
-      await update({ issueId, description: next });
-      setEditing(false);
+      while (queued.current !== null) {
+        const pending = queued.current;
+        queued.current = null;
+        if (pending === saved.current) continue;
+        if (pending.length > 20000) {
+          toast.error("Description is too long");
+          continue;
+        }
+        await updateRef.current({ issueId: issueRef.current, description: pending });
+        saved.current = pending;
+      }
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {
-      saving.current = false;
+      writing.current = false;
+      if (queued.current !== null && queued.current !== saved.current) void persist(queued.current);
     }
   }
 
-  async function toggleTask(index: number) {
-    const next = toggleTaskAt(description, index);
-    if (next === description) return;
-    try {
-      await update({ issueId, description: next });
-    } catch (error) {
-      toast.error(errorMessage(error));
-    }
-  }
-
-  if (!editing) {
-    return (
-      <div className="mt-2 lg:mt-3">
-        {description.trim() ? (
-          <MarkdownBody source={description} onToggleTask={(index) => void toggleTask(index)} />
-        ) : (
-          <p className="text-sm text-muted-foreground">No description yet.</p>
-        )}
-        <button
-          type="button"
-          className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            setValue(description);
-            setEditing(true);
-          }}
-        >
-          {description.trim() ? "Edit description" : "Add description"}
-        </button>
-      </div>
-    );
+  function schedule(next: string) {
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      void persist(next);
+    }, 450);
   }
 
   return (
-    <div className="mt-2 space-y-2 lg:mt-3">
+    <div className="mt-1 lg:mt-2">
       <MarkdownEditor
         value={value}
-        onChange={setValue}
-        placeholder="Write in Markdown…"
+        variant="plain"
+        placeholder="Add a description…"
         ariaLabel="Description"
-        autoFocus
-        onSubmit={() => void save(value)}
+        onChange={(next) => {
+          latest.current = next;
+          setValue(next);
+          schedule(next);
+        }}
+        onBlur={() => {
+          if (timer.current) window.clearTimeout(timer.current);
+          void persist(latest.current);
+        }}
+        onSubmit={() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        }}
       />
-      <div className="flex items-center gap-2">
-        <Button type="button" size="sm" onClick={() => void save(value)}>
-          Save
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            setValue(description);
-            setEditing(false);
-          }}
-        >
-          Cancel
-        </Button>
-        <span className="text-[11px] text-muted-foreground">⌘/Ctrl+Enter to save</span>
-      </div>
     </div>
   );
 }

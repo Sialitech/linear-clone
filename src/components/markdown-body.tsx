@@ -1,11 +1,12 @@
 "use client";
 
-import { remarkMentions, safeMarkdownUrl, type MentionMark } from "@/lib/markdown-edit";
+import { remarkMentions, safeMarkdownUrl, shortenedAutolinkLabel, type MentionMark } from "@/lib/markdown-edit";
 import rehypeTaskIndex, { taskIndexFromClassName } from "@/lib/rehype-task-index";
 import { cn } from "@/lib/utils";
 import { Check, Copy } from "lucide-react";
 import Link from "next/link";
 import { Children, isValidElement, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
@@ -69,6 +70,8 @@ function markdownComponents(readToggle: () => ((index: number) => void) | undefi
         return <span className="markdown-mention">{children}</span>;
       }
       if (!href) return <>{children}</>;
+      const short = shortenedAutolinkLabel(href, plainText(children));
+      if (short) return <ShortLink href={href} label={short} />;
       if (/^https?:\/\//i.test(href)) {
         return (
           <a href={href} title={title} target="_blank" rel="noreferrer noopener">
@@ -161,6 +164,76 @@ function CodeBlock({ children }: { children?: ReactNode }) {
       <pre ref={preRef}>{children}</pre>
     </div>
   );
+}
+
+function ShortLink({ href, label }: { href: string; label: string }) {
+  const [tip, setTip] = useState<{ left: number; top: number; above: boolean; maxWidth: number } | null>(null);
+  const external = /^https?:\/\//i.test(href);
+
+  function show(target: HTMLElement) {
+    const rect = target.getBoundingClientRect();
+    const maxWidth = Math.min(520, window.innerWidth - 16);
+    setTip({
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - maxWidth - 8)),
+      top: rect.top > 96 ? rect.top - 8 : rect.bottom + 8,
+      above: rect.top > 96,
+      maxWidth,
+    });
+  }
+
+  const tipNode =
+    tip && typeof document !== "undefined"
+      ? createPortal(
+          <span
+            role="tooltip"
+            className="markdown-url-tip"
+            style={{
+              left: tip.left,
+              top: tip.top,
+              maxWidth: tip.maxWidth,
+              transform: tip.above ? "translateY(-100%)" : undefined,
+            }}
+          >
+            {href}
+          </span>,
+          document.body,
+        )
+      : null;
+
+  if (!external && href.startsWith("/")) {
+    return (
+      <Link href={href} className="markdown-url" aria-label={href} onMouseEnter={(event) => show(event.currentTarget)} onMouseLeave={() => setTip(null)} onFocus={(event) => show(event.currentTarget)} onBlur={() => setTip(null)}>
+        {label}
+        {tipNode}
+      </Link>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      className="markdown-url"
+      aria-label={href}
+      {...(external ? { target: "_blank" as const, rel: "noreferrer noopener" } : {})}
+      onMouseEnter={(event) => show(event.currentTarget)}
+      onMouseLeave={() => setTip(null)}
+      onFocus={(event) => show(event.currentTarget)}
+      onBlur={() => setTip(null)}
+    >
+      {label}
+      {tipNode}
+    </a>
+  );
+}
+
+function plainText(children: ReactNode): string {
+  return Children.toArray(children)
+    .map((child) => {
+      if (typeof child === "string" || typeof child === "number") return String(child);
+      if (isValidElement<{ children?: ReactNode }>(child)) return plainText(child.props.children);
+      return "";
+    })
+    .join("");
 }
 
 function languageOf(children: ReactNode) {

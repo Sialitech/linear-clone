@@ -221,6 +221,42 @@
   opacity: 0.8;
 }
 
+.markdown-body a.markdown-url {
+  display: inline;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--md-link) 14%, transparent);
+  padding: 0.05em 0.35em;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body a.markdown-url:hover,
+.markdown-body a.markdown-url:focus-visible {
+  background: color-mix(in srgb, var(--md-link) 24%, transparent);
+  opacity: 1;
+}
+
+.markdown-url-tip {
+  position: fixed;
+  z-index: 80;
+  width: max-content;
+  max-width: min(34rem, calc(100vw - 16px));
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 28%);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.markdown-body strong {
+  font-weight: 650;
+}
+
 .markdown-body .markdown-mention {
   border-radius: 0.25rem;
   background: color-mix(in srgb, var(--md-link) 18%, transparent);
@@ -452,3 +488,147 @@
 .markdown-body[data-tone="on-dark"] .hljs-name,
 .markdown-body[data-tone="on-dark"] .hljs-selector-id,
 .markdown-body[data-tone="on-dark"] .hljs-selector-class { color: #7ee787; }
+
+.notion-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.notion-editor > .notion-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: inherit;
+}
+
+.notion-editor .ProseMirror {
+  flex: 1;
+  min-height: inherit;
+  outline: none;
+  white-space: pre-wrap;
+}
+
+.notion-editor .markdown-url-short {
+  font-size: 0;
+}
+
+.notion-editor a:has(.markdown-url-short) {
+  text-decoration: none;
+}
+
+.notion-editor .markdown-url-short::after {
+  content: attr(data-short);
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--md-link) 14%, transparent);
+  padding: 0.05em 0.35em;
+  color: var(--md-link);
+  font-size: 0.875rem;
+  line-height: 1.65;
+  text-decoration: none;
+}
+
+.notion-editor .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.notion-editor .ProseMirror > :last-child {
+  margin-bottom: 0;
+}
+
+.notion-editor .ProseMirror p.is-editor-empty::before {
+  float: left;
+  height: 0;
+  color: var(--md-soft);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.notion-placeholder {
+  margin: 0;
+  color: var(--md-soft);
+  font-size: 0.875rem;
+}
+
+.notion-editor[data-variant="plain"] {
+  margin-inline: -0.5rem;
+  border-radius: 0.5rem;
+  padding: 0.15rem 0.5rem;
+}
+
+.notion-editor[data-variant="plain"]:hover,
+.notion-editor[data-variant="plain"]:focus-within {
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+
+.notion-editor[data-tone="on-dark"][data-variant="plain"]:hover,
+.notion-editor[data-tone="on-dark"][data-variant="plain"]:focus-within {
+  background: rgb(255 255 255 / 5%);
+}
+
+.notion-editor[data-variant="field"] {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  background: transparent;
+}
+
+.notion-editor[data-variant="field"]:focus-within {
+  border-color: var(--ring);
+}
+
+.notion-editor[data-variant="field"] .ProseMirror {
+  max-height: 9rem;
+  min-height: 4.5rem;
+  overflow-y: auto;
+}
+
+.markdown-body.notion-editor ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.1rem;
+}
+
+.notion-editor li[data-type="taskItem"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.notion-editor li[data-type="taskItem"] > label {
+  flex: none;
+  margin-top: 0.28rem;
+}
+
+.notion-editor li[data-type="taskItem"] > label input {
+  accent-color: var(--md-link);
+}
+
+.notion-editor li[data-type="taskItem"] > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.notion-editor li[data-type="taskItem"] > div > p {
+  margin: 0.15em 0;
+}
+
+.notion-editor pre {
+  margin: 0.65em 0;
+  overflow-x: auto;
+  border-radius: 0.6rem;
+  background: var(--md-code);
+  padding: 0.75rem 0.9rem;
+  color: var(--md-fg);
+}
+
+.notion-editor pre code {
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.notion-editor .ProseMirror-selectednode {
+  outline: 2px solid var(--md-link);
+  border-radius: 0.35rem;
+}
