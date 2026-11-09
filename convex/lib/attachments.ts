@@ -1,5 +1,6 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { materializeImages, type IncomingImage } from "./materializeImages";
 
 const STORAGE_IMAGE = /!\[[^\]]*\]\((?:storage:|https?:\/\/[^)\s]*\/api\/storage\/)([a-z0-9]+)\)/gi;
 
@@ -59,4 +60,30 @@ export async function linkAttachments(
       ...(args.commentId ? { commentId: args.commentId } : {}),
     });
   }
+}
+
+export async function storeMarkdownImages(
+  ctx: MutationCtx,
+  args: {
+    workspaceId: Id<"workspaces">;
+    userId: Id<"users">;
+    text: string;
+    images?: IncomingImage[];
+  },
+) {
+  return materializeImages(args.text, args.images ?? [], async (file) => {
+    const buffer = file.bytes.buffer.slice(file.bytes.byteOffset, file.bytes.byteOffset + file.bytes.byteLength) as ArrayBuffer;
+    const storageId = await ctx.storage.store(new Blob([buffer], { type: file.contentType }));
+    await ctx.db.insert("attachments", {
+      storageId,
+      workspaceId: args.workspaceId,
+      uploadedBy: args.userId,
+      fileName: file.name.slice(0, 200) || "image",
+      contentType: file.contentType,
+      createdAt: Date.now(),
+    });
+    const url = await ctx.storage.getUrl(storageId);
+    if (!url) throw new Error("Image upload failed");
+    return url;
+  });
 }

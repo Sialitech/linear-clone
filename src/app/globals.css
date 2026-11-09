@@ -403,11 +403,71 @@
   font-weight: 600;
 }
 
-.markdown-body img {
+.markdown-body img,
+.image-frame img {
   max-width: 100%;
   height: auto;
   border: 1px solid var(--md-border);
   border-radius: 0.5rem;
+}
+
+.image-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0.4rem 0;
+}
+
+.image-frame-expand,
+.image-lightbox-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.62);
+  color: white;
+  cursor: pointer;
+}
+
+.image-frame-expand {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  width: 1.7rem;
+  height: 1.7rem;
+}
+
+.image-frame-expand svg,
+.image-lightbox-close svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem;
+  background: rgba(0, 0, 0, 0.84);
+}
+
+.image-lightbox img {
+  max-width: min(100%, 1400px);
+  max-height: 100%;
+  object-fit: contain;
+  border: 0;
+}
+
+.image-lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2rem;
+  height: 2rem;
 }
 
 .markdown-body .footnotes {

@@ -1,5 +1,6 @@
 "use client";
 
+import ImageFrame from "@/components/image-frame";
 import MarkdownBody from "@/components/markdown-body";
 import {
   findSlashQuery,
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { Extension, type Editor } from "@tiptap/core";
 import TiptapCode from "@tiptap/extension-code";
 import Image from "@tiptap/extension-image";
+import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import TaskItem from "@tiptap/extension-task-item";
@@ -22,7 +24,6 @@ import TaskList from "@tiptap/extension-task-list";
 import { Markdown } from "@tiptap/markdown";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import {
@@ -576,6 +577,20 @@ export default function MarkdownEditor({
   );
 }
 
+function ImageNodeView({ node }: { node: { attrs: { src?: string; alt?: string } } }) {
+  return (
+    <NodeViewWrapper as="span" className="image-frame-host">
+      <ImageFrame src={node.attrs.src ?? ""} alt={node.attrs.alt ?? ""} />
+    </NodeViewWrapper>
+  );
+}
+
+const FrameImage = Image.extend({
+  addNodeView() {
+    return ReactNodeViewRenderer(ImageNodeView);
+  },
+});
+
 function createExtensions(readMentions: () => MentionMark[], readPlaceholder: () => string | undefined) {
   return [
     StarterKit.configure({
@@ -595,7 +610,7 @@ function createExtensions(readMentions: () => MentionMark[], readPlaceholder: ()
       },
     }),
     InclusiveCode,
-    Image.configure({ allowBase64: false }),
+    FrameImage.configure({ allowBase64: false }),
     TaskList,
     TaskItem.configure({ nested: true }),
     Table.configure({ resizable: false }),
