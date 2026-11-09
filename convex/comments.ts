@@ -2,6 +2,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { z } from "zod";
 import { loadPublicUser, requireIssueAccess, type ReadCtx } from "./lib/access";
+import { linkAttachments } from "./lib/attachments";
 import { recordActivity } from "./lib/activity";
 import { commentChangeEvents } from "./lib/webhookEvents";
 import { commentWebhookData, emitWebhookEvents } from "./lib/webhooks";
@@ -126,6 +127,12 @@ export async function createComment(
       mentionIds,
       createdAt: now,
     });
+    await linkAttachments(ctx, {
+      workspaceId: issue.workspaceId,
+      text: args.content,
+      issueId: issue._id,
+      commentId,
+    });
     await recordActivity(ctx, {
       issueId: args.issueId,
       workspaceId: issue.workspaceId,
@@ -190,6 +197,12 @@ export async function updateComment(
       updatedAt: now,
     });
     await deleteMentionsForComment(ctx, comment._id);
+    await linkAttachments(ctx, {
+      workspaceId: issue.workspaceId,
+      text: args.content,
+      issueId: issue._id,
+      commentId: comment._id,
+    });
     await writeMentions(ctx, {
       workspaceId: issue.workspaceId,
       issueId: issue._id,
@@ -242,6 +255,12 @@ export async function removeComment(ctx: MutationCtx, commentId: Id<"comments">)
     }
     const removed = commentWebhookData(comment);
     await deleteMentionsForComment(ctx, comment._id);
+    await linkAttachments(ctx, {
+      workspaceId: issue.workspaceId,
+      text: "",
+      issueId: issue._id,
+      commentId: comment._id,
+    });
     await ctx.db.delete("comments", comment._id);
     await recordActivity(ctx, {
       issueId: comment.issueId,

@@ -10,6 +10,7 @@ import {
   splitMentions,
   type MentionMark,
 } from "@/lib/markdown-edit";
+import { firstImageFile } from "@/lib/upload-image";
 import { cn } from "@/lib/utils";
 import { Extension, type Editor } from "@tiptap/core";
 import TiptapCode from "@tiptap/extension-code";
@@ -42,7 +43,8 @@ import {
   Table as TableIcon,
   Type,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 export type EditorCaret = {
@@ -105,6 +107,8 @@ export default function MarkdownEditor({
   onPointerDown,
   onSubmit,
   onBlur,
+  uploadImage,
+  commandRef,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -120,6 +124,8 @@ export default function MarkdownEditor({
   onPointerDown?: () => void;
   onSubmit?: () => void;
   onBlur?: () => void;
+  uploadImage?: (file: File) => Promise<{ url: string; alt: string; markdown: string }>;
+  commandRef?: RefObject<{ insertMarkdown: (markdown: string) => void } | null>;
 }) {
   const onChangeRef = useRef(onChange);
   const onBlurRef = useRef(onBlur);
@@ -127,6 +133,7 @@ export default function MarkdownEditor({
   const onKeyDownRef = useRef(onKeyDown);
   const onCaretRef = useRef(onCaretContext);
   const onPointerRef = useRef(onPointerDown);
+  const uploadRef = useRef(uploadImage);
   const mentionsRef = useRef(mentions);
   const placeholderRef = useRef(placeholder);
   const editorRef = useRef<Editor | null>(null);
@@ -143,6 +150,14 @@ export default function MarkdownEditor({
   onKeyDownRef.current = onKeyDown;
   onCaretRef.current = onCaretContext;
   onPointerRef.current = onPointerDown;
+  uploadRef.current = uploadImage;
+  if (commandRef) {
+    commandRef.current = {
+      insertMarkdown: (markdown) => {
+        editorRef.current?.chain().focus().insertContent(`${markdown}\n`, { contentType: "markdown" }).run();
+      },
+    };
+  }
   mentionsRef.current = mentions;
   placeholderRef.current = placeholder;
 
@@ -279,6 +294,18 @@ export default function MarkdownEditor({
         handleKeyDown: (view, event) => keyDownRef.current(view, event),
         handlePaste: (_view, event) => {
           armed.current = true;
+          const image = firstImageFile(event.clipboardData?.files);
+          if (image && uploadRef.current) {
+            const upload = uploadRef.current;
+            void upload(image)
+              .then((uploaded) => {
+                editorRef.current?.chain().focus().setImage({ src: uploaded.url, alt: uploaded.alt }).run();
+              })
+              .catch((error: unknown) => {
+                toast.error(error instanceof Error ? error.message : "Image upload failed");
+              });
+            return true;
+          }
           const text = event.clipboardData?.getData("text/plain") ?? "";
           const html = event.clipboardData?.getData("text/html") ?? "";
           const current = editorRef.current;
@@ -311,9 +338,29 @@ export default function MarkdownEditor({
             armed.current = true;
             return false;
           },
-          drop: () => {
-            armed.current = true;
+          dragover: (_view, event) => {
+            if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
             return false;
+          },
+          drop: (_view, event) => {
+            armed.current = true;
+            const image = firstImageFile(event.dataTransfer?.files);
+            const upload = uploadRef.current;
+            if (!image || !upload || !editorRef.current) return false;
+            event.preventDefault();
+            const coords = editorRef.current.view.posAtCoords({ left: event.clientX, top: event.clientY });
+            void upload(image)
+              .then((uploaded) => {
+                const current = editorRef.current;
+                if (!current) return;
+                const imageNode = { type: "image", attrs: { src: uploaded.url, alt: uploaded.alt } };
+                if (coords) current.chain().focus().insertContentAt(coords.pos, imageNode).run();
+                else current.chain().focus().setImage({ src: uploaded.url, alt: uploaded.alt }).run();
+              })
+              .catch((error: unknown) => {
+                toast.error(error instanceof Error ? error.message : "Image upload failed");
+              });
+            return true;
           },
           blur: () => {
             onBlurRef.current?.();
