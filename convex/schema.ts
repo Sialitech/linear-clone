@@ -162,6 +162,19 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_issue", ["issueId"]),
+  attachments: defineTable({
+    storageId: v.id("_storage"),
+    workspaceId: v.id("workspaces"),
+    uploadedBy: v.id("users"),
+    fileName: v.string(),
+    contentType: v.string(),
+    issueId: v.optional(v.id("issues")),
+    commentId: v.optional(v.id("comments")),
+    createdAt: v.number(),
+  })
+    .index("by_storage", ["storageId"])
+    .index("by_issue", ["issueId"])
+    .index("by_comment", ["commentId"]),
   mentions: defineTable({
     workspaceId: v.id("workspaces"),
     issueId: v.id("issues"),

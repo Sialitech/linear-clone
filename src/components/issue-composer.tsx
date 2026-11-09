@@ -10,6 +10,7 @@ import {
 } from "@convex/model";
 import LabelChip from "@/components/label-chip";
 import MarkdownEditor from "@/components/markdown-editor";
+import { useUploadImage } from "@/components/use-upload-image";
 import PriorityIcon from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
@@ -170,6 +171,8 @@ export default function IssueComposer() {
   const hydratedIssue = useRef<string | null>(null);
   const assigneeDefaulted = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const editorCommands = useRef<{ insertMarkdown: (markdown: string) => void } | null>(null);
+  const uploadImage = useUploadImage();
 
   useEffect(() => {
     if (composer?.mode !== "create") return;
@@ -488,6 +491,8 @@ export default function IssueComposer() {
               tone="on-dark"
               variant="plain"
               areaClassName={expanded ? "min-h-[36vh]" : "min-h-24"}
+              uploadImage={uploadImage}
+              commandRef={editorCommands}
             />
           </div>
           <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3">
@@ -814,17 +819,15 @@ export default function IssueComposer() {
               <input
                 ref={fileRef}
                 type="file"
+                accept="image/*"
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   event.target.value = "";
                   if (!file) return;
-                  setDraft((current) => ({
-                    ...current,
-                    description: current.description
-                      ? `${current.description}\nAttached: ${file.name}`
-                      : `Attached: ${file.name}`,
-                  }));
+                  void uploadImage(file)
+                    .then((image) => editorCommands.current?.insertMarkdown(image.markdown))
+                    .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Image upload failed"));
                 }}
               />
               <Button

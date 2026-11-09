@@ -1,5 +1,6 @@
 "use client";
 
+import ImageFrame from "@/components/image-frame";
 import { remarkMentions, safeMarkdownUrl, shortenedAutolinkLabel, type MentionMark } from "@/lib/markdown-edit";
 import rehypeTaskIndex, { taskIndexFromClassName } from "@/lib/rehype-task-index";
 import { cn } from "@/lib/utils";
@@ -94,11 +95,7 @@ function markdownComponents(readToggle: () => ((index: number) => void) | undefi
     },
     img: function MarkdownImage({ src, alt }) {
       if (!src || typeof src !== "string") return null;
-      return (
-        // Remote markdown images are arbitrary https URLs, not local assets.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={alt ?? ""} loading="lazy" />
-      );
+      return <ImageFrame src={src} alt={alt ?? ""} />;
     },
     input: function MarkdownCheckbox({ className, checked, type }) {
       if (type !== "checkbox") return <input type={type} className={className} />;

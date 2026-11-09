@@ -10,6 +10,8 @@ import {
 } from "./comments";
 import { createIssue, getIssue, listIssues, listTriage, triageIssue, updateIssue } from "./issues";
 import { setMcpActor } from "./lib/access";
+import { storeMarkdownImages } from "./lib/attachments";
+import type { IncomingImage } from "./lib/materializeImages";
 import { ISSUE_STATUSES, TRIAGE_ACTIONS, WORKFLOW_STATUSES } from "./model";
 import { toolResult } from "./mcpProtocol";
 
@@ -24,6 +26,21 @@ function text(value: unknown) {
 
 function asJson(value: unknown) {
   return JSON.stringify(value, null, 2);
+}
+
+function incomingImages(value: unknown): IncomingImage[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("images must be an array");
+  if (value.length > 4) throw new Error("At most 4 images");
+  return value.map((item) => {
+    if (!item || typeof item !== "object") throw new Error("Invalid image");
+    const record = item as Record<string, unknown>;
+    const name = text(record.name) || "image";
+    const contentType = text(record.contentType);
+    const data = typeof record.data === "string" ? record.data : "";
+    if (!contentType.startsWith("image/") || !data) throw new Error("Each image needs contentType and base64 data");
+    return { name, contentType, data };
+  });
 }
 
 async function memberOrThrow(
@@ -274,10 +291,17 @@ export const dispatch = internalMutation({
             const project = await resolveProject(ctx, workspaceId, projectRef);
             const parentRef = input.parent === null ? null : text(input.parent);
             const parent = parentRef ? await resolveIssue(ctx, workspaceId, parentRef) : null;
+            const images = incomingImages(input.images);
+            const description = await storeMarkdownImages(ctx, {
+              workspaceId,
+              userId: actorId,
+              text: typeof input.description === "string" ? input.description : "",
+              images,
+            });
             const issueId = await createIssue(ctx, {
               projectId: project._id,
               title,
-              ...(typeof input.description === "string" ? { description: input.description } : {}),
+              ...(description ? { description } : {}),
               ...(text(input.status) ? { status: text(input.status) as Doc<"issues">["status"] } : {}),
               ...(text(input.priority)
                 ? { priority: text(input.priority) as Doc<"issues">["priority"] }
@@ -298,12 +322,22 @@ export const dispatch = internalMutation({
             return toolResult(asJson(created));
           }
           const issue = await resolveIssue(ctx, workspaceId, id);
+          const images = incomingImages(input.images);
+          const description =
+            typeof input.description === "string" || images.length > 0
+              ? await storeMarkdownImages(ctx, {
+                  workspaceId,
+                  userId: actorId,
+                  text: typeof input.description === "string" ? input.description : issue.description,
+                  images,
+                })
+              : undefined;
           const projectRef = text(input.project);
           const project = projectRef ? await resolveProject(ctx, workspaceId, projectRef) : null;
           await updateIssue(ctx, {
             issueId: issue._id,
             ...(text(input.title) ? { title: text(input.title) } : {}),
-            ...(typeof input.description === "string" ? { description: input.description } : {}),
+            ...(description !== undefined ? { description } : {}),
             ...(text(input.status) ? { status: text(input.status) as Doc<"issues">["status"] } : {}),
             ...(text(input.priority)
               ? { priority: text(input.priority) as Doc<"issues">["priority"] }
@@ -375,9 +409,20 @@ export const dispatch = internalMutation({
           return toolResult(asJson(await listComments(ctx, issue._id)));
         }
         case "save_comment": {
-          const body = typeof input.body === "string" ? input.body.trim() : "";
-          if (!body) throw new Error("Comment body is required");
+          const images = incomingImages(input.images);
           const commentId = text(input.id);
+          let raw = typeof input.body === "string" ? input.body : "";
+          if (commentId && typeof input.body !== "string") {
+            const existing = await ctx.db.get("comments", commentId as Id<"comments">);
+            raw = existing?.content ?? "";
+          }
+          const body = (await storeMarkdownImages(ctx, {
+            workspaceId,
+            userId: actorId,
+            text: raw,
+            images,
+          })).trim();
+          if (!body) throw new Error("Comment body is required");
           if (commentId) {
             const id = await updateComment(ctx, { commentId: commentId as Id<"comments">, content: body });
             return toolResult(asJson({ id }));

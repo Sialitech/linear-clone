@@ -76,14 +76,28 @@ export const MCP_TOOLS = [
   {
     name: "save_issue",
     description:
-      "Create or update an issue. Pass id to update. When creating, project (id or key) and title are required. Assignee may be a user id or \"me\". Clear assignee, due date, or cycle with null.",
+      "Create or update an issue. Pass id to update. When creating, project (id or key) and title are required. Assignee may be a user id or \"me\". Clear assignee, due date, or cycle with null. Description accepts markdown images: pass images or embed data:image base64 URLs.",
     inputSchema: {
       type: "object",
       properties: {
         id: { type: "string" },
         project: { type: "string" },
         title: { type: "string" },
-        description: { type: "string" },
+        description: { type: "string", description: "Markdown. Inline data:image base64 URLs are uploaded." },
+        images: {
+          type: "array",
+          maxItems: 4,
+          description: "Images to upload and append. Each data field is raw base64, at most 1 MB.",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              contentType: { type: "string" },
+              data: { type: "string" },
+            },
+            required: ["contentType", "data"],
+          },
+        },
         status: {
           type: "string",
           enum: ["triage", "backlog", "todo", "in_progress", "in_review", "done", "canceled"],
@@ -147,15 +161,29 @@ export const MCP_TOOLS = [
   },
   {
     name: "save_comment",
-    description: "Add a comment, or update one when id is set. Only the author can edit a comment.",
+    description:
+      "Add a comment, or update one when id is set. Only the author can edit a comment. body is markdown. Inline data:image URLs and the images array are uploaded (base64, 1 MB each, up to 4).",
     inputSchema: {
       type: "object",
       properties: {
         id: { type: "string" },
         issue: { type: "string" },
         body: { type: "string" },
+        images: {
+          type: "array",
+          maxItems: 4,
+          description: "Images to upload and append. data is raw base64.",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              contentType: { type: "string" },
+              data: { type: "string" },
+            },
+            required: ["contentType", "data"],
+          },
+        },
       },
-      required: ["body"],
       additionalProperties: false,
     },
   },

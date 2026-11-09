@@ -61,5 +61,6 @@ export async function allocateProjectKey(
 }
 
 export function toSearchText(title: string, description: string) {
-  return `${title}\n${description}`.slice(0, 4000);
+  const plain = description.replace(/!\[[^\]]*\]\((?:storage:|https?:\/\/[^)\s]*\/api\/storage\/)[a-z0-9]+\)/gi, " ");
+  return `${title}\n${plain}`.slice(0, 4000);
 }

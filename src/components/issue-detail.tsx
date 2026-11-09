@@ -7,6 +7,7 @@ import IssueActivity from "@/components/issue-activity";
 import IssueContextMenu from "@/components/issue-context-menu";
 import MarkdownBody from "@/components/markdown-body";
 import MarkdownEditor, { type EditorCaret } from "@/components/markdown-editor";
+import { useUploadImage } from "@/components/use-upload-image";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
@@ -718,6 +719,7 @@ function MentionComposer({
   ariaLabel?: string;
   areaClassName?: string;
 }) {
+  const uploadImage = useUploadImage();
   const [caret, setCaret] = useState<EditorCaret | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [escaped, setEscaped] = useState(false);
@@ -781,6 +783,7 @@ function MentionComposer({
         onCaretContext={setCaret}
         onPointerDown={() => setEscaped(false)}
         onKeyDown={onTextKeyDown}
+        uploadImage={uploadImage}
       />
       {open ? (
         <ul
@@ -894,6 +897,7 @@ function InlineDescription({
   const timer = useRef<number | null>(null);
   const updateRef = useRef(update);
   const issueRef = useRef(issueId);
+  const uploadImage = useUploadImage();
   const [value, setValue] = useState(description);
   updateRef.current = update;
   issueRef.current = issueId;
@@ -965,6 +969,7 @@ function InlineDescription({
         onSubmit={() => {
           if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         }}
+        uploadImage={uploadImage}
       />
     </div>
   );

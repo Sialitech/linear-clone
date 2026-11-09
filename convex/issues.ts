@@ -29,6 +29,7 @@ import {
   zMutation,
   zQuery,
 } from "./lib/functions";
+import { linkAttachments } from "./lib/attachments";
 import { toSearchText } from "./lib/keys";
 import { issueChangeEvents } from "./lib/webhookEvents";
 import { emitWebhookEvents, issueWebhookData, type WebhookNotice } from "./lib/webhooks";
@@ -513,6 +514,11 @@ export async function createIssue(
       issueCounter: number,
       updatedAt: now,
     });
+    await linkAttachments(ctx, {
+      workspaceId: project.workspaceId,
+      text: description,
+      issueId,
+    });
     await recordActivity(ctx, {
       issueId,
       workspaceId: project.workspaceId,
@@ -826,6 +832,11 @@ export async function updateIssue(
     }
 
     const clearSnooze = args.status !== undefined && args.status !== "triage";
+    await linkAttachments(ctx, {
+      workspaceId,
+      text: description,
+      issueId: issue._id,
+    });
     await ctx.db.patch("issues", issue._id, {
       title,
       description,
