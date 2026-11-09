@@ -5,6 +5,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
 import IssueActivity from "@/components/issue-activity";
 import IssueContextMenu from "@/components/issue-context-menu";
+import MarkdownBody from "@/components/markdown-body";
+import MarkdownEditor, { type EditorCaret } from "@/components/markdown-editor";
 import LabelChip from "@/components/label-chip";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
@@ -19,16 +21,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { dateInputToTimestamp, dateInputValue, errorMessage, formatDue, isOverdue } from "@/lib/format";
 import { issueBranchName } from "@/lib/github-branch";
+import { toggleTaskAt, type MentionMark } from "@/lib/markdown-edit";
 import {
   activeMentionIds,
   filterMembers,
   findMentionQuery,
   memberMentionLabel,
   mentionToken,
-  segmentCommentMentions,
   type MentionMember,
 } from "@/lib/mentions";
 import type { IssueItem } from "@/lib/types";
@@ -53,6 +54,19 @@ const prUrlSchema = z
   );
 
 type PendingMention = { userId: Id<"users">; token: string };
+
+function mentionMarks(mentionIds: Id<"users">[], members: MentionMember[]): MentionMark[] {
+  const byId = new Map(members.map((member) => [member._id, member]));
+  return mentionIds.flatMap((id) => {
+    const member = byId.get(id);
+    if (!member) return [];
+    return [{ userId: id, token: mentionToken(member) }];
+  });
+}
+
+function pendingMarks(pending: PendingMention[]): MentionMark[] {
+  return pending.map((item) => ({ userId: item.userId, token: item.token }));
+}
 
 export default function IssueDetail({ issueId, onClose }: { issueId: string; onClose?: () => void }) {
   const id = issueId as Id<"issues">;
@@ -202,7 +216,7 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
         <div className="flex min-h-0 flex-col overflow-hidden">
           <div className="max-h-[min(24rem,58%)] min-h-0 shrink-0 overflow-y-auto overscroll-y-contain px-4 py-3 sm:px-6 sm:py-4">
             <InlineTitle issueId={id} title={issue.title} />
-            <InlineDescription issueId={id} description={issue.description ?? ""} />
+            <InlineDescription key={id} issueId={id} description={issue.description ?? ""} />
             <SubIssues issueId={id} projectId={issue.projectId} />
           </div>
           <IssueActivity issueId={id} />
@@ -280,17 +294,30 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
                           pending={editingMentions}
                           onChange={setEditingText}
                           onPendingChange={setEditingMentions}
+                          ariaLabel="Edit comment"
                         />
                         <Button type="submit" size="sm">Save</Button>
                       </form>
                     ) : (
-                      <p className="mt-1 text-sm whitespace-pre-wrap">
-                        <CommentBody
-                          content={item.content}
-                          mentionIds={item.mentionIds}
-                          members={memberList}
+                      <div className="mt-1">
+                        <MarkdownBody
+                          source={item.content}
+                          mentions={mentionMarks(item.mentionIds, memberList)}
+                          onToggleTask={
+                            item.author?._id === me?._id
+                              ? (index) => {
+                                  const next = toggleTaskAt(item.content, index);
+                                  if (next === item.content) return;
+                                  void updateComment({
+                                    commentId: item._id,
+                                    content: next,
+                                    mentionIds: item.mentionIds,
+                                  }).catch((error: unknown) => toast.error(errorMessage(error)));
+                                }
+                              : undefined
+                          }
                         />
-                      </p>
+                      </div>
                     )}
                   </div>
                 </article>
@@ -304,9 +331,9 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
                   pending={pendingMentions}
                   onChange={setComment}
                   onPendingChange={setPendingMentions}
-                  placeholder="Leave a comment"
+                  placeholder="Leave a comment…"
                   menuPlacement="up"
-                  textareaClassName="max-h-24 min-h-10"
+                  ariaLabel="Comment"
                 />
               </div>
               <Button type="submit" size="sm" className="mb-0.5 shrink-0">Comment</Button>
@@ -670,37 +697,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function CommentBody({
-  content,
-  mentionIds,
-  members,
-}: {
-  content: string;
-  mentionIds: Id<"users">[];
-  members: MentionMember[];
-}) {
-  const segments = useMemo(
-    () => segmentCommentMentions(content, mentionIds, members),
-    [content, mentionIds, members],
-  );
-  return (
-    <>
-      {segments.map((segment, index) =>
-        segment.type === "mention" ? (
-          <span
-            key={`${segment.userId}-${index}`}
-            className="rounded-sm bg-muted px-0.5 text-foreground"
-          >
-            {segment.value}
-          </span>
-        ) : (
-          <span key={`t-${index}`}>{segment.value}</span>
-        ),
-      )}
-    </>
-  );
-}
-
 function MentionComposer({
   value,
   members,
@@ -709,7 +705,8 @@ function MentionComposer({
   onPendingChange,
   placeholder,
   menuPlacement = "down",
-  textareaClassName,
+  ariaLabel,
+  areaClassName,
 }: {
   value: string;
   members: MentionMember[];
@@ -718,13 +715,13 @@ function MentionComposer({
   onPendingChange: (pending: PendingMention[]) => void;
   placeholder?: string;
   menuPlacement?: "up" | "down";
-  textareaClassName?: string;
+  ariaLabel?: string;
+  areaClassName?: string;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [caret, setCaret] = useState(0);
+  const [caret, setCaret] = useState<EditorCaret | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [escaped, setEscaped] = useState(false);
-  const query = findMentionQuery(value, caret);
+  const query = caret ? findMentionQuery(caret.blockText, caret.caret) : null;
   const options = useMemo(
     () => (query ? filterMembers(members, query.query).slice(0, 8) : []),
     [members, query],
@@ -732,62 +729,58 @@ function MentionComposer({
   const open = Boolean(query) && options.length > 0 && !escaped;
 
   function selectMember(member: MentionMember) {
-    if (!query || !textareaRef.current) return;
+    if (!query || !caret) return;
     const token = mentionToken(member);
-    const before = value.slice(0, query.start);
-    const after = value.slice(query.end);
-    const next = `${before}${token} ${after}`;
-    const nextCaret = before.length + token.length + 1;
-    onChange(next);
+    caret.replace(query.start, query.end, `${token} `);
     onPendingChange([
       ...pending.filter((item) => item.userId !== member._id),
       { userId: member._id, token },
     ]);
     setActiveIndex(0);
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(nextCaret, nextCaret);
-      setCaret(nextCaret);
-    });
+    setEscaped(false);
+  }
+
+  function onTextKeyDown(event: KeyboardEvent) {
+    if (!open) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((index) => (index + 1) % options.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index) => (index - 1 + options.length) % options.length);
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      event.preventDefault();
+      const member = options[activeIndex];
+      if (member) selectMember(member);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setEscaped(true);
+    }
   }
 
   return (
     <div className="relative">
-      <Textarea
-        ref={textareaRef}
+      <MarkdownEditor
         value={value}
+        mentions={pendingMarks(pending)}
         placeholder={placeholder}
-        className={textareaClassName}
-        onChange={(event) => {
-          onChange(event.target.value);
-          setCaret(event.target.selectionStart);
+        ariaLabel={ariaLabel}
+        areaClassName={areaClassName}
+        variant="field"
+        onChange={(next) => {
+          onChange(next);
           setActiveIndex(0);
           setEscaped(false);
         }}
-        onClick={(event) => {
-          setCaret(event.currentTarget.selectionStart);
-          setEscaped(false);
-        }}
-        onKeyUp={(event) => setCaret(event.currentTarget.selectionStart)}
-        onKeyDown={(event) => {
-          if (!open) return;
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setActiveIndex((index) => (index + 1) % options.length);
-          } else if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setActiveIndex((index) => (index - 1 + options.length) % options.length);
-          } else if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            const member = options[activeIndex];
-            if (member) selectMember(member);
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            setEscaped(true);
-          }
-        }}
+        onCaretContext={setCaret}
+        onPointerDown={() => setEscaped(false)}
+        onKeyDown={onTextKeyDown}
       />
       {open ? (
         <ul
@@ -894,37 +887,85 @@ function InlineDescription({
   description: string;
 }) {
   const update = useMutation(api.issues.update);
+  const latest = useRef(description);
+  const saved = useRef(description);
+  const writing = useRef(false);
+  const queued = useRef<string | null>(null);
+  const timer = useRef<number | null>(null);
+  const updateRef = useRef(update);
+  const issueRef = useRef(issueId);
   const [value, setValue] = useState(description);
-  const dirty = useRef(false);
+  updateRef.current = update;
+  issueRef.current = issueId;
 
   useEffect(() => {
-    if (!dirty.current) setValue(description);
+    if (latest.current !== saved.current) return;
+    latest.current = description;
+    saved.current = description;
+    setValue(description);
   }, [description]);
 
-  async function save() {
-    if (value === description) {
-      dirty.current = false;
-      return;
-    }
+  useEffect(() => {
+    return () => {
+      if (timer.current) window.clearTimeout(timer.current);
+      const next = latest.current;
+      if (next !== saved.current && next.length <= 20000) {
+        void updateRef.current({ issueId: issueRef.current, description: next }).catch(() => undefined);
+      }
+    };
+  }, []);
+
+  async function persist(next: string) {
+    queued.current = next;
+    if (writing.current) return;
+    writing.current = true;
     try {
-      await update({ issueId, description: value });
-      dirty.current = false;
+      while (queued.current !== null) {
+        const pending = queued.current;
+        queued.current = null;
+        if (pending === saved.current) continue;
+        if (pending.length > 20000) {
+          toast.error("Description is too long");
+          continue;
+        }
+        await updateRef.current({ issueId: issueRef.current, description: pending });
+        saved.current = pending;
+      }
     } catch (error) {
       toast.error(errorMessage(error));
+    } finally {
+      writing.current = false;
+      if (queued.current !== null && queued.current !== saved.current) void persist(queued.current);
     }
   }
 
+  function schedule(next: string) {
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      void persist(next);
+    }, 450);
+  }
+
   return (
-    <textarea
-      aria-label="Description"
-      value={value}
-      placeholder="Add description"
-      onChange={(event) => {
-        dirty.current = true;
-        setValue(event.target.value);
-      }}
-      onBlur={() => void save()}
-      className="mt-2 min-h-12 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-muted-foreground lg:mt-3 lg:min-h-28"
-    />
+    <div className="mt-1 lg:mt-2">
+      <MarkdownEditor
+        value={value}
+        variant="plain"
+        placeholder="Add a description…"
+        ariaLabel="Description"
+        onChange={(next) => {
+          latest.current = next;
+          setValue(next);
+          schedule(next);
+        }}
+        onBlur={() => {
+          if (timer.current) window.clearTimeout(timer.current);
+          void persist(latest.current);
+        }}
+        onSubmit={() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        }}
+      />
+    </div>
   );
 }

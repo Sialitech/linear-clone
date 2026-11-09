@@ -9,6 +9,7 @@ import {
   type Priority,
 } from "@convex/model";
 import LabelChip from "@/components/label-chip";
+import MarkdownEditor from "@/components/markdown-editor";
 import PriorityIcon from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
@@ -34,7 +35,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Textarea } from "@/components/ui/textarea";
 import { cycleValue, dateInputToTimestamp, dateInputValue, errorMessage } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
@@ -480,13 +480,14 @@ export default function IssueComposer() {
               className="h-9 border-none bg-transparent px-0 text-lg font-medium text-[#f3f3f3] shadow-none placeholder:text-[#6d717a] focus-visible:ring-0"
               autoFocus
             />
-            <Textarea
+            <MarkdownEditor
               value={draft.description}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, description: event.target.value }))
-              }
-              placeholder="Add description..."
-              className="min-h-24 resize-none border-none bg-transparent px-0 text-sm text-[#d0d1d4] shadow-none placeholder:text-[#6d717a] focus-visible:ring-0"
+              onChange={(description) => setDraft((current) => ({ ...current, description }))}
+              placeholder="Add a description…"
+              ariaLabel="Description"
+              tone="on-dark"
+              variant="plain"
+              areaClassName={expanded ? "min-h-[36vh]" : "min-h-24"}
             />
           </div>
           <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3">
