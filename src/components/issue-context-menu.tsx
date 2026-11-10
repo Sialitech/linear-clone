@@ -2,7 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
+import { ISSUE_STATUSES, PRIORITIES, type IssueStatus } from "@convex/model";
 import PriorityIcon, { priorityLabel } from "@/components/priority-icon";
 import StatusIcon, { statusLabel } from "@/components/status-icon";
 import UserAvatar from "@/components/user-avatar";
@@ -38,6 +38,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import SubIssueStatusDialog from "@/components/sub-issue-status-dialog";
 import { toast } from "sonner";
 
 type Submenu = "status" | "priority" | "assignee" | "due" | "labels" | "project" | "related";
@@ -69,6 +70,7 @@ export default function IssueContextMenu({
   const [labelOverride, setLabelOverride] = useState<Id<"labels">[] | null>(null);
   const [dueError, setDueError] = useState<string | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<IssueStatus | null>(null);
   const press = useRef<{ timer: number; x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
   const openedAt = useRef(0);
@@ -494,7 +496,15 @@ export default function IssueContextMenu({
                           icon={<StatusIcon status={status} />}
                           label={statusLabel(status)}
                           active={status === issue.status}
-                          onClick={() => void patch({ status })}
+                          onClick={() => {
+                            if (status === issue.status) return;
+                            setMenu(null);
+                            if (issue.subIssues.total > 0) {
+                              setPendingStatus(status);
+                              return;
+                            }
+                            void patch({ status });
+                          }}
                         />
                       ))
                     : null}
@@ -660,6 +670,22 @@ export default function IssueContextMenu({
             document.body,
           )
         : null}
+      <SubIssueStatusDialog
+        open={pendingStatus !== null}
+        status={pendingStatus}
+        count={issue.subIssues.total}
+        onDismiss={() => setPendingStatus(null)}
+        onOnlyThis={() => {
+          const status = pendingStatus;
+          setPendingStatus(null);
+          if (status) void patch({ status });
+        }}
+        onAll={() => {
+          const status = pendingStatus;
+          setPendingStatus(null);
+          if (status) void patch({ status, applyToSubIssues: true });
+        }}
+      />
     </div>
   );
 }

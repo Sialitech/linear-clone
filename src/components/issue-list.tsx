@@ -357,7 +357,7 @@ function IssueRows({
         <PriorityPicker issueId={issue._id} priority={issue.priority} />
         <span className="w-14 shrink-0 font-mono text-xs text-muted-foreground">{issue.identifier}</span>
         {depth > 0 ? <TreeMark /> : null}
-        <StatusPicker issueId={issue._id} status={issue.status} />
+        <StatusPicker issueId={issue._id} status={issue.status} subIssueCount={issue.subIssues.total} />
         <Link
           href={`/issues/${issue._id}`}
           onClick={(event) => {

@@ -2,7 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ISSUE_STATUSES, PRIORITIES } from "@convex/model";
+import { ISSUE_STATUSES, PRIORITIES, type IssueStatus } from "@convex/model";
 import IssueActivity from "@/components/issue-activity";
 import IssueContextMenu from "@/components/issue-context-menu";
 import MarkdownBody from "@/components/markdown-body";
@@ -40,6 +40,7 @@ import { Copy, ExternalLink, Unlink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import SubIssueStatusDialog from "@/components/sub-issue-status-dialog";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -97,6 +98,7 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
   const [editingComment, setEditingComment] = useState<Id<"comments"> | null>(null);
   const [editingText, setEditingText] = useState("");
   const [prUrl, setPrUrl] = useState("");
+  const [pendingStatus, setPendingStatus] = useState<IssueStatus | null>(null);
   const branchName = issue ? issueBranchName(issue.identifier, issue.title) : "";
   const [editingMentions, setEditingMentions] = useState<PendingMention[]>([]);
 
@@ -106,6 +108,22 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
     } catch (error) {
       toast.error(errorMessage(error));
     }
+  }
+
+  function chooseStatus(status: IssueStatus) {
+    if (!issue || status === issue.status) return;
+    if (issue.subIssues.total > 0) {
+      setPendingStatus(status);
+      return;
+    }
+    void patch({ issueId: id, status });
+  }
+
+  function applyPendingStatus(applyToSubIssues: boolean) {
+    const status = pendingStatus;
+    setPendingStatus(null);
+    if (!status) return;
+    void patch({ issueId: id, status, ...(applyToSubIssues ? { applyToSubIssues: true } : {}) });
   }
 
   async function onComment(event: React.FormEvent) {
@@ -190,6 +208,7 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
   const memberList = members ?? [];
 
   return (
+    <>
     <IssueContextMenu issue={issue} className="flex h-full min-h-0 flex-col">
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex min-h-12 items-center gap-2 border-b border-border px-3 py-2 sm:gap-3 sm:px-4">
@@ -351,7 +370,7 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 {ISSUE_STATUSES.map((status) => (
-                  <DropdownMenuItem key={status} onClick={() => void patch({ issueId: id, status })}>
+                  <DropdownMenuItem key={status} onClick={() => chooseStatus(status)}>
                     <StatusIcon status={status} />
                     {statusLabel(status)}
                   </DropdownMenuItem>
@@ -519,6 +538,15 @@ export default function IssueDetail({ issueId, onClose }: { issueId: string; onC
       </div>
     </div>
     </IssueContextMenu>
+    <SubIssueStatusDialog
+      open={pendingStatus !== null}
+      status={pendingStatus}
+      count={issue.subIssues.total}
+      onDismiss={() => setPendingStatus(null)}
+      onOnlyThis={() => applyPendingStatus(false)}
+      onAll={() => applyPendingStatus(true)}
+    />
+    </>
   );
 }
 

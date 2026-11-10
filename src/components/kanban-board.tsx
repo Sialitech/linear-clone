@@ -35,6 +35,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
+import SubIssueStatusDialog from "@/components/sub-issue-status-dialog";
 import { toast } from "sonner";
 
 type Columns = Record<WorkflowStatus, IssueItem[]>;
@@ -113,6 +114,12 @@ export default function KanbanBoard({
   const columnsRef = useRef(columns);
   const dragging = useRef(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [pendingMove, setPendingMove] = useState<{
+    issueId: Id<"issues">;
+    status: WorkflowStatus;
+    order: number;
+    count: number;
+  } | null>(null);
   const move = useMutation(api.issues.move).withOptimisticUpdate((localStore, args) => {
     const current = localStore.getQuery(api.issues.list, {
       workspaceId: args.workspaceId,
@@ -177,15 +184,34 @@ export default function KanbanBoard({
       index === nextIndex ? { ...issue, status, order } : issue,
     );
     updateColumns({ ...next, [status]: placed });
+    if (status !== original.status && original.subIssues.total > 0) {
+      setPendingMove({
+        issueId: original._id,
+        status,
+        order,
+        count: original.subIssues.total,
+      });
+      return;
+    }
+    void commitMove(original._id, status, order, false);
+  }
+
+  function commitMove(
+    issueId: Id<"issues">,
+    status: WorkflowStatus,
+    order: number,
+    applyToSubIssues: boolean,
+  ) {
     void move({
-      issueId: original._id,
+      issueId,
       workspaceId,
       projectId,
       status,
       order,
+      ...(applyToSubIssues ? { applyToSubIssues: true } : {}),
     }).catch((error: unknown) => {
       toast.error(errorMessage(error));
-      updateColumns(groupIssues(issues));
+      if (issues) updateColumns(groupIssues(issues));
     });
   }
 
@@ -222,6 +248,25 @@ export default function KanbanBoard({
       <DragOverlay>
         {activeIssue ? <IssueCard issue={activeIssue} overlay /> : null}
       </DragOverlay>
+      <SubIssueStatusDialog
+        open={pendingMove !== null}
+        status={pendingMove?.status ?? null}
+        count={pendingMove?.count ?? 0}
+        onDismiss={() => {
+          setPendingMove(null);
+          if (issues) updateColumns(groupIssues(issues));
+        }}
+        onOnlyThis={() => {
+          const pending = pendingMove;
+          setPendingMove(null);
+          if (pending) commitMove(pending.issueId, pending.status, pending.order, false);
+        }}
+        onAll={() => {
+          const pending = pendingMove;
+          setPendingMove(null);
+          if (pending) commitMove(pending.issueId, pending.status, pending.order, true);
+        }}
+      />
     </DndContext>
   );
 }
