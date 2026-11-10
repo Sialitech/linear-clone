@@ -15,31 +15,53 @@ import { cn } from "@/lib/utils";
 import { useMutation } from "convex/react";
 import { Check } from "lucide-react";
 import { useCallback, useEffect, useState, type MouseEvent, type PointerEvent } from "react";
+import SubIssueStatusDialog from "@/components/sub-issue-status-dialog";
 import { toast } from "sonner";
 
 export default function StatusPicker({
   issueId,
   status,
+  subIssueCount = 0,
   className,
 }: {
   issueId: Id<"issues">;
   status: IssueStatus;
+  subIssueCount?: number;
   className?: string;
 }) {
   const update = useMutation(api.issues.update);
   const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState<IssueStatus | null>(null);
 
   const apply = useCallback(
-    async (next: IssueStatus) => {
+    async (next: IssueStatus, applyToSubIssues = false) => {
       setOpen(false);
+      setPending(null);
       if (next === status) return;
       try {
-        await update({ issueId, status: next });
+        await update({
+          issueId,
+          status: next,
+          ...(applyToSubIssues ? { applyToSubIssues: true } : {}),
+        });
       } catch (error) {
         toast.error(errorMessage(error));
       }
     },
     [issueId, status, update],
+  );
+
+  const choose = useCallback(
+    (next: IssueStatus) => {
+      setOpen(false);
+      if (next === status) return;
+      if (subIssueCount > 0) {
+        setPending(next);
+        return;
+      }
+      void apply(next);
+    },
+    [apply, status, subIssueCount],
   );
 
   useEffect(() => {
@@ -51,11 +73,11 @@ export default function StatusPicker({
       if (!next) return;
       event.preventDefault();
       event.stopPropagation();
-      void apply(next);
+      void choose(next);
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, apply]);
+  }, [open, choose]);
 
   function keepInRow(event: MouseEvent | PointerEvent) {
     event.stopPropagation();
@@ -109,7 +131,7 @@ export default function StatusPicker({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                void apply(item);
+                void choose(item);
               }}
             >
               <StatusIcon status={item} className="size-3.5" />
@@ -121,6 +143,14 @@ export default function StatusPicker({
         })}
       </DropdownMenuContent>
     </DropdownMenu>
+    <SubIssueStatusDialog
+      open={pending !== null}
+      status={pending}
+      count={subIssueCount}
+      onDismiss={() => setPending(null)}
+      onOnlyThis={() => pending && void apply(pending, false)}
+      onAll={() => pending && void apply(pending, true)}
+    />
     </span>
   );
 }

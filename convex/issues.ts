@@ -683,6 +683,7 @@ export async function updateIssue(
     projectId?: Id<"projects">;
     order?: number;
     snoozedUntil?: number | null;
+    applyToSubIssues?: boolean;
   },
 ) {
     const { issue, userId } = await requireIssueAccess(ctx, args.issueId);
@@ -859,6 +860,16 @@ export async function updateIssue(
     });
     const after = await ctx.db.get("issues", issue._id);
     if (after) await publishIssueUpdate(ctx, issue, after);
+    if (args.applyToSubIssues && args.status !== undefined) {
+      const children = await ctx.db
+        .query("issues")
+        .withIndex("by_parent", (q) => q.eq("parentId", issue._id))
+        .collect();
+      for (const child of children) {
+        if (child.status === args.status) continue;
+        await updateIssue(ctx, { issueId: child._id, status: args.status });
+      }
+    }
     return issue._id;
 }
 
@@ -875,6 +886,7 @@ export const update = zMutation({
     cycleId: cycleIdSchema.nullable().optional(),
     projectId: projectIdSchema.optional(),
     order: z.number().finite().optional(),
+    applyToSubIssues: z.boolean().optional(),
   },
   handler: updateIssue,
 });
@@ -936,6 +948,7 @@ export const move = zMutation({
     projectId: projectIdSchema,
     status: issueStatusSchema,
     order: z.number().finite(),
+    applyToSubIssues: z.boolean().optional(),
   },
   handler: async (ctx, args) => {
     const { issue } = await requireIssueAccess(ctx, args.issueId);
@@ -952,6 +965,16 @@ export const move = zMutation({
     if (statusChanged) {
       const after = await ctx.db.get("issues", issue._id);
       if (after) await publishIssueUpdate(ctx, issue, after);
+    }
+    if (args.applyToSubIssues) {
+      const children = await ctx.db
+        .query("issues")
+        .withIndex("by_parent", (q) => q.eq("parentId", issue._id))
+        .collect();
+      for (const child of children) {
+        if (child.status === args.status) continue;
+        await updateIssue(ctx, { issueId: child._id, status: args.status });
+      }
     }
     return issue._id;
   },
