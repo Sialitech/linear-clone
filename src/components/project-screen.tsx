@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { GitBranch, LayoutGrid, List, Plus, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -56,6 +56,22 @@ export default function ProjectScreen({
       }
     : "skip";
   const issues = useQuery(api.issues.list, mode === "board" ? (workspace ? { workspaceId: workspace._id, projectId: id } : "skip") : listArgs);
+  const listGroups = useMemo(() => {
+    if (mode !== "list" || status || !issues) return undefined;
+    const open = issues.filter((issue) => issue.status !== "done");
+    const done = issues.filter((issue) => issue.status === "done");
+    if (done.length === 0) return undefined;
+    const byUpdated = (a: (typeof issues)[number], b: (typeof issues)[number]) => b.updatedAt - a.updatedAt;
+    return [
+      { key: "open", label: "", issues: [...open].sort(byUpdated) },
+      {
+        key: "done",
+        label: "Done",
+        icon: <StatusIcon status="done" />,
+        issues: [...done].sort(byUpdated),
+      },
+    ];
+  }, [issues, mode, status]);
 
   async function saveView() {
     if (!workspace) return;
@@ -211,7 +227,12 @@ export default function ProjectScreen({
       {mode === "board" && workspace ? (
         <KanbanBoard issues={issues} workspaceId={workspace._id} projectId={id} />
       ) : (
-        <IssueList issues={issues} empty="No issues match these filters." showSubIssues={showSubIssues} />
+        <IssueList
+          issues={issues}
+          groups={listGroups}
+          empty="No issues match these filters."
+          showSubIssues={showSubIssues}
+        />
       )}
     </div>
   );
