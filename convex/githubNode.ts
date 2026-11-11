@@ -8,7 +8,7 @@ import { signGithubAppJwt } from "./lib/githubJwt";
 const githubHeaders = {
   Accept: "application/vnd.github+json",
   "User-Agent": "linear-clone",
-  "X-GitHub-Api-Version": "2022-11-28",
+  "X-GitHub-Api-Version": "2026-03-10",
 };
 
 async function installationToken(appId: string, privateKey: string, installationId: number) {
