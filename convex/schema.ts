@@ -213,6 +213,8 @@ export default defineSchema({
     fromLabel: v.optional(v.string()),
     toLabel: v.optional(v.string()),
   }).index("by_issue", ["issueId"]),
+  // Obsoleta: las vistas guardadas se eliminaron de la app. La tabla se conserva porque Convex no
+  // permite quitar del esquema una tabla con documentos; se puede borrar tras vaciarla.
   views: defineTable({
     name: v.string(),
     workspaceId: v.id("workspaces"),

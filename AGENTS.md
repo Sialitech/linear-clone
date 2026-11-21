@@ -4,7 +4,7 @@ Guía para agentes que trabajan en este repo. Describe `origin/main` en el commi
 
 ## Qué es
 
-Gestor de issues con interfaz estilo Linear: inbox, triage, proyectos con lista y tablero Kanban, ciclos, vistas guardadas, comentarios en vivo con menciones, Markdown con imágenes, integración con GitHub, servidor MCP remoto y webhooks salientes.
+Gestor de issues con interfaz estilo Linear: inbox, triage, proyectos con lista y tablero Kanban, ciclos, comentarios en vivo con menciones, Markdown con imágenes, integración con GitHub, servidor MCP remoto y webhooks salientes.
 
 - **Frontend:** Next.js 15 (App Router, Turbopack), React 19, TypeScript estricto, Tailwind CSS 4, shadcn estilo `base-nova` sobre `@base-ui/react`, lucide-react, dnd-kit, Tiptap 3, react-markdown, sonner.
 - **Backend:** Convex (base de datos, queries, mutations, actions, HTTP, storage, scheduler) con Convex Auth. Zod 4 valida los argumentos mediante `convex-helpers`.
@@ -49,7 +49,7 @@ convex/
   http.ts              Rutas HTTP: auth, /github/*, /mcp
   issues.ts            Issues: listados, crear, actualizar, triage, mover, borrar, sub-issues
   comments.ts          Comentarios y menciones
-  projects.ts, labels.ts, cycles.ts, views.ts, activities.ts, users.ts
+  projects.ts, labels.ts, cycles.ts, activities.ts, users.ts
   attachments.ts       Subida de imágenes
   apiTokens.ts         Tokens personales para MCP
   mcp.ts, mcpProtocol.ts    Servidor MCP (despacho de herramientas / JSON-RPC puro)
@@ -86,7 +86,8 @@ Todo cuelga de un **workspace**. Cualquier dato lleva `workspaceId` (o se llega 
 | `issues` | Título, descripción Markdown, estado, prioridad, asignado, etiquetas, fecha, ciclo, padre, `order`, `number` | Identificador visible `KEY-number` (p. ej. `GEN-12`) |
 | `comments`, `mentions` | Comentarios y una fila por usuario mencionado | `mentionIds` puede faltar en filas antiguas: trátalo como `[]` |
 | `activities` | Historial del issue (18 tipos) con `fromLabel` / `toLabel` | Solo texto ya formateado |
-| `labels`, `cycles`, `views` | Etiquetas, ciclos numerados y vistas guardadas (filtros + agrupación + orden) | |
+| `labels`, `cycles` | Etiquetas y ciclos numerados | |
+| `views` | **Obsoleta.** Las vistas guardadas se eliminaron de la app; la tabla sigue en `schema.ts` porque Convex no deja quitar una tabla con datos | Bórrala del esquema cuando esté vacía |
 | `attachments` | Imágenes en `_storage`, enlazadas a issue o comentario | |
 | `apiTokens` | Tokens MCP: solo el hash SHA-256 y un prefijo | |
 | `webhooks`, `webhookDeliveries` | Suscripciones y cola/historial de entregas | |
@@ -144,7 +145,7 @@ Lo más seguro es pasar por `updateIssue` / `createIssue` / `createComment` en l
 
 ### Alta de usuario
 
-`users.ensureWorkspace` se llama desde el cliente cuando el usuario no tiene workspaces. Reclama invitaciones pendientes y, si no hay ninguna, crea el workspace con el proyecto «General», seis issues de ejemplo, tres etiquetas y las vistas «All issues» y «My issues».
+`users.ensureWorkspace` se llama desde el cliente cuando el usuario no tiene workspaces. Reclama invitaciones pendientes y, si no hay ninguna, crea el workspace con el proyecto «General», seis issues de ejemplo, y tres etiquetas.
 
 ## Frontend
 
@@ -157,7 +158,6 @@ Lo más seguro es pasar por `updateIssue` / `createIssue` / `createComment` en l
 | `/triage` | `TriageScreen` |
 | `/projects`, `/projects/[id]`, `/projects/[id]/board` | `ProjectsScreen`, `ProjectScreen` en modo lista o tablero |
 | `/cycles` | `CyclesScreen` |
-| `/views/[viewId]` | `SavedViewScreen` (`/views` redirige a `/`) |
 | `/issues/[issueId]` | `IssueDetail` a página completa |
 | `/settings` | Apariencia, perfil, workspace, miembros, MCP, webhooks, GitHub |
 | `POST /mcp` | Proxy hacia Convex |
@@ -181,7 +181,7 @@ El peek y el compositor son **estado en memoria, no URL**: no sobreviven a una r
 - **Datos:** `useQuery(api.x.y, workspace ? { workspaceId: workspace._id } : "skip")`. `undefined` significa cargando (se pinta un skeleton) y `null`, no encontrado. Las consultas que no hacen falta todavía se pasan como `"skip"`.
 - **Mutaciones:** `try { await m(args) } catch (e) { toast.error(errorMessage(e)) }`. La validación en cliente usa Zod `safeParse`.
 - **Actualización optimista:** solo el tablero usa `withOptimisticUpdate`, y parchea la caché de `api.issues.list` con argumentos exactamente `{ workspaceId, projectId }`. Si cambias los argumentos de esa consulta en modo tablero, el arrastre deja de reflejarse al instante. En el resto se usa estado local con vuelta atrás si falla.
-- **Persistencia de opciones:** las vistas guardadas almacenan filtros, agrupación y orden en el servidor (`api.views.update`). Los filtros de la pantalla de proyecto son estado local. `localStorage` solo guarda el tema y el workspace.
+- **Persistencia de opciones:** los filtros, la agrupación y el orden de la pantalla de proyecto son estado local (se pierden al salir). `localStorage` solo guarda el tema y el workspace.
 - **Tipos:** en `src/lib/types.ts`, derivados con `FunctionReturnType` de las consultas. No dupliques interfaces a mano.
 - **`"use client"`** en todo componente interactivo. `src/lib` son módulos puros sin React.
 
@@ -192,7 +192,7 @@ El peek y el compositor son **estado en memoria, no URL**: no sobreviven a una r
 - `issue-composer.tsx`: crear y editar. La recurrencia y los enlaces extra **no son campos**: se escriben como texto dentro de la descripción.
 - `issue-context-menu.tsx`: menú contextual propio (no base-ui) con submenús y atajos; en táctil se abre con pulsación larga.
 - `kanban-board.tsx`: dnd-kit; columnas = `WORKFLOW_STATUSES`.
-- `view-controls.tsx`: filtros y opciones de visualización de las vistas guardadas, con envío en serie para que la respuesta del servidor no pise ediciones en curso.
+- `issue-filters.tsx`: menú Filter (multiselección en estado, prioridad, asignado y etiqueta), chips y menú Display. `issue-group-builder.tsx` construye grupos y subgrupos. La lógica pura está en `convex/lib/viewFilters.ts`; `issues.list` acepta `statuses`, `priorities`, `assigneeIds` y `labelIds` (OR dentro de un campo, AND entre campos).
 - `markdown-editor.tsx` / `markdown-body.tsx`: editor Tiptap que guarda Markdown, y visor de solo lectura con react-markdown. Las URL pasan por `safeMarkdownUrl` y lo guardado por `sanitizeStoredMarkdown`.
 
 ### Estilo

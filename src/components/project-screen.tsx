@@ -19,17 +19,12 @@ import StatusIcon from "@/components/status-icon";
 import { useWorkspace } from "@/components/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { errorMessage } from "@/lib/format";
 import { sortIssues } from "@/lib/issue-groups";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { LayoutGrid, List, Plus } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
-import { z } from "zod";
-
-const viewNameSchema = z.string().trim().min(1).max(80);
 
 export default function ProjectScreen({
   projectId,
@@ -45,8 +40,6 @@ export default function ProjectScreen({
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   // Los proyectos arrancan ordenados por última actualización, como antes de tener opciones de display.
   const [display, setDisplay] = useState<DisplayState>({ ...DEFAULT_DISPLAY, orderBy: "updated" });
-  const [saving, setSaving] = useState(false);
-  const createView = useMutation(api.views.create);
   const needsMe = filters.assignees.includes("me");
   const listArgs =
     workspace && (!needsMe || me)
@@ -76,39 +69,6 @@ export default function ProjectScreen({
       { key: "done", label: "Done", icon: <StatusIcon status="done" />, issues: done },
     ];
   }, [ordered, mode, display.groupBy, display.subGroupBy, orderBy, filters.statuses.length]);
-
-  async function saveView() {
-    if (!workspace) return;
-    const name = window.prompt("View name");
-    if (!name) return;
-    const parsed = viewNameSchema.safeParse(name);
-    if (!parsed.success) {
-      toast.error("Enter a view name");
-      return;
-    }
-    setSaving(true);
-    try {
-      await createView({
-        workspaceId: workspace._id,
-        name: parsed.data,
-        projectId: id,
-        statuses: filters.statuses,
-        priorities: filters.priorities,
-        assignees: filters.assignees,
-        labelIds: filters.labelIds,
-        ...(display.groupBy ? { groupBy: display.groupBy } : {}),
-        ...(display.subGroupBy ? { subGroupBy: display.subGroupBy } : {}),
-        // `null` es la prioridad (valor por defecto de las vistas); `updated` se guarda tal cual.
-        ...(display.orderBy ? { orderBy: display.orderBy } : {}),
-        showSubIssues: display.showSubIssues,
-      });
-      toast.success("View saved");
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setSaving(false);
-    }
-  }
 
   if (project === null) {
     return <div className="p-6 text-sm text-muted-foreground">Project not found.</div>;
@@ -181,16 +141,6 @@ export default function ProjectScreen({
                 display={display}
                 onChange={(patch) => setDisplay((current) => ({ ...current, ...patch }))}
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-9 sm:h-8"
-                disabled={saving}
-                onClick={() => void saveView()}
-              >
-                Save view
-              </Button>
             </div>
           </div>
           <FilterChips
