@@ -223,6 +223,14 @@ export default defineSchema({
     assigneeMode: assigneeMode,
     assigneeId: v.optional(v.id("users")),
     labelId: v.optional(v.id("labels")),
+    // Filtros multiselección. Sustituyen a los campos singulares de arriba,
+    // que se siguen leyendo en vistas antiguas (ver convex/lib/viewFilters.ts).
+    statuses: v.optional(v.array(issueStatus)),
+    priorities: v.optional(v.array(priority)),
+    assignees: v.optional(
+      v.array(v.union(v.literal("me"), v.literal("unassigned"), v.id("users"))),
+    ),
+    labelIds: v.optional(v.array(v.id("labels"))),
     groupBy: v.optional(viewGroup),
     subGroupBy: v.optional(viewGroup),
     orderBy: v.optional(viewOrder),

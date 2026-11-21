@@ -31,6 +31,7 @@ import {
 } from "./lib/functions";
 import { linkAttachments } from "./lib/attachments";
 import { toSearchText } from "./lib/keys";
+import { issueMatchesListFilters } from "./lib/viewFilters";
 import { issueChangeEvents } from "./lib/webhookEvents";
 import { emitWebhookEvents, issueWebhookData, type WebhookNotice } from "./lib/webhooks";
 import { isWorkflowStatus, splitTriage, TRIAGE_ACTIONS, WORKFLOW_STATUSES } from "./model";
@@ -247,6 +248,10 @@ function matchesFilters(
     labelId?: Id<"labels">;
     cycleId?: Id<"cycles">;
     unassigned?: boolean;
+    statuses?: Doc<"issues">["status"][];
+    priorities?: Doc<"issues">["priority"][];
+    assigneeIds?: Id<"users">[];
+    labelIds?: Id<"labels">[];
   },
 ) {
   if (issue.workspaceId !== args.workspaceId) return false;
@@ -254,10 +259,17 @@ function matchesFilters(
   if (args.status && issue.status !== args.status) return false;
   if (args.priority && issue.priority !== args.priority) return false;
   if (args.assigneeId && issue.assigneeId !== args.assigneeId) return false;
-  if (args.unassigned && issue.assigneeId !== undefined) return false;
   if (args.labelId && !issue.labelIds.includes(args.labelId)) return false;
   if (args.cycleId && issue.cycleId !== args.cycleId) return false;
-  return true;
+  // Sin `assigneeIds`, `unassigned` es «solo sin asignar». Con `assigneeIds` se une a ellos (OR).
+  if (args.unassigned && !args.assigneeIds && issue.assigneeId !== undefined) return false;
+  return issueMatchesListFilters(issue, {
+    statuses: args.statuses,
+    priorities: args.priorities,
+    assigneeIds: args.assigneeIds,
+    unassigned: args.assigneeIds && args.unassigned ? true : undefined,
+    labelIds: args.labelIds,
+  });
 }
 
 const listIssueArgs = {
@@ -270,6 +282,10 @@ const listIssueArgs = {
   cycleId: cycleIdSchema.optional(),
   search: z.string().trim().max(200).optional(),
   unassigned: z.boolean().optional(),
+  statuses: z.array(issueStatusSchema).max(7).optional(),
+  priorities: z.array(prioritySchema).max(5).optional(),
+  assigneeIds: z.array(userIdSchema).max(50).optional(),
+  labelIds: z.array(labelIdSchema).max(50).optional(),
 };
 
 export async function listIssues(
@@ -284,6 +300,10 @@ export async function listIssues(
     cycleId?: Id<"cycles">;
     search?: string;
     unassigned?: boolean;
+    statuses?: Doc<"issues">["status"][];
+    priorities?: Doc<"issues">["priority"][];
+    assigneeIds?: Id<"users">[];
+    labelIds?: Id<"labels">[];
   },
 ) {
     await requireWorkspaceMember(ctx, args.workspaceId);
@@ -305,6 +325,26 @@ export async function listIssues(
         .query("issues")
         .withIndex("by_cycle", (q) => q.eq("cycleId", cycleId))
         .take(300);
+    } else if (args.statuses && args.statuses.length > 0 && !args.status) {
+      const projectId = args.projectId;
+      const batches = await Promise.all(
+        args.statuses.map((status) =>
+          projectId
+            ? ctx.db
+                .query("issues")
+                .withIndex("by_project_and_status", (q) =>
+                  q.eq("projectId", projectId).eq("status", status),
+                )
+                .take(200)
+            : ctx.db
+                .query("issues")
+                .withIndex("by_workspace_and_status", (q) =>
+                  q.eq("workspaceId", args.workspaceId).eq("status", status),
+                )
+                .take(200),
+        ),
+      );
+      issues = batches.flat();
     } else if (args.projectId && args.status) {
       const projectId = args.projectId;
       const status = args.status;
@@ -320,6 +360,16 @@ export async function listIssues(
         .query("issues")
         .withIndex("by_project", (q) => q.eq("projectId", projectId))
         .take(300);
+    } else if (args.assigneeIds && args.assigneeIds.length > 0 && !args.assigneeId && !args.unassigned) {
+      const batches = await Promise.all(
+        args.assigneeIds.map((assigneeId) =>
+          ctx.db
+            .query("issues")
+            .withIndex("by_assignee", (q) => q.eq("assigneeId", assigneeId))
+            .take(200),
+        ),
+      );
+      issues = batches.flat();
     } else if (args.assigneeId) {
       const assigneeId = args.assigneeId;
       issues = await ctx.db
@@ -343,7 +393,7 @@ export async function listIssues(
 
     const filtered = issues.filter((issue) => matchesFilters(issue, args));
     const visible =
-      args.status || search
+      args.status || args.statuses || search
         ? filtered
         : filtered.filter((issue) => isWorkflowStatus(issue.status));
     return await enrichIssues(ctx, visible);
