@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { useTheme } from "@/components/theme-provider";
 import UserAvatar from "@/components/user-avatar";
 import { errorMessage, projectColor } from "@/lib/format";
-import type { ProjectItem, ViewItem } from "@/lib/types";
+import type { ProjectItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import posthog from "posthog-js";
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -59,30 +59,13 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
     api.projects.list,
     workspace ? { workspaceId: workspace._id } : "skip",
   );
-  const views = useQuery(api.views.list, workspace ? { workspaceId: workspace._id } : "skip");
   const triage = useQuery(
     api.issues.triageQueue,
     workspace ? { workspaceId: workspace._id } : "skip",
   );
   const triageCount = triage?.waiting.length ?? 0;
-  const pruneSeeded = useMutation(api.views.pruneSeeded);
-  const prunedWorkspace = useRef<Id<"workspaces"> | null>(null);
   const { signOut } = useAuthActions();
   const [creating, setCreating] = useState(false);
-  const [creatingView, setCreatingView] = useState(false);
-
-  useEffect(() => {
-    if (!workspace || prunedWorkspace.current === workspace._id) return;
-    let cancelled = false;
-    void pruneSeeded({ workspaceId: workspace._id })
-      .then(() => {
-        if (!cancelled) prunedWorkspace.current = workspace._id;
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [workspace, pruneSeeded]);
 
   async function logout() {
     posthog.reset();
@@ -193,33 +176,6 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
           ))}
         </div>
 
-        <div>
-          <div className="flex items-center gap-1 px-2 pb-1">
-            <div className="min-w-0 flex-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              Views
-            </div>
-            <button
-              type="button"
-              aria-label="New view"
-              onClick={() => setCreatingView(true)}
-              className={cn(
-                "inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
-                roomy ? "size-10" : "size-5",
-              )}
-            >
-              <Plus className={roomy ? "size-4" : "size-3.5"} />
-            </button>
-          </div>
-          {views?.map((view) => (
-            <ViewRow
-              key={view._id}
-              view={view}
-              active={pathname === `/views/${view._id}`}
-              onNavigate={onNavigate}
-              roomy={roomy}
-            />
-          ))}
-        </div>
       </div>
 
       <div className="border-t border-border p-2">
@@ -269,12 +225,6 @@ export default function SidebarNav({ onNavigate }: { onNavigate?: () => void }) 
             open={creating}
             workspaceId={workspace._id}
             onOpenChange={setCreating}
-          />
-          <CreateViewDialog
-            open={creatingView}
-            workspaceId={workspace._id}
-            onOpenChange={setCreatingView}
-            onNavigate={onNavigate}
           />
         </>
       ) : null}
@@ -455,153 +405,6 @@ function ProjectRow({
   );
 }
 
-function ViewRow({
-  view,
-  active,
-  onNavigate,
-  roomy,
-}: {
-  view: ViewItem;
-  active: boolean;
-  onNavigate?: () => void;
-  roomy: boolean;
-}) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const rename = useMutation(api.views.rename);
-  const remove = useMutation(api.views.remove);
-  const [renaming, setRenaming] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [name, setName] = useState(view.name);
-  const [pending, setPending] = useState(false);
-  const href = `/views/${view._id}`;
-
-  async function onRename(event: React.FormEvent) {
-    event.preventDefault();
-    const parsed = viewNameSchema.safeParse(name);
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Enter a view name");
-      return;
-    }
-    if (parsed.data === view.name) {
-      setRenaming(false);
-      return;
-    }
-    setPending(true);
-    try {
-      await rename({ viewId: view._id, name: parsed.data });
-      setRenaming(false);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function onDelete() {
-    setPending(true);
-    try {
-      await remove({ viewId: view._id });
-      setConfirmingDelete(false);
-      if (pathname === href) router.push("/");
-      onNavigate?.();
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <>
-      <div
-        className={cn(
-          "flex items-center rounded-md text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground",
-          roomy && "min-h-11",
-          active && "bg-accent text-foreground",
-        )}
-      >
-        <Link href={href} onClick={onNavigate} className="min-w-0 flex-1 truncate px-2 py-1.5">
-          {view.name}
-        </Link>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label={`Actions for ${view.name}`}
-                className={cn(
-                  "mr-1 inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
-                  roomy ? "size-10" : "size-6",
-                )}
-              />
-            }
-          >
-            <MoreHorizontal className={roomy ? "size-4" : "size-3.5"} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="right" align="start" className="w-40">
-            <DropdownMenuItem
-              onClick={() => {
-                setName(view.name);
-                setRenaming(true);
-              }}
-            >
-              <Pencil className="size-3.5" />
-              Rename
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onClick={() => setConfirmingDelete(true)}>
-              <Trash2 className="size-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <Dialog open={renaming} onOpenChange={setRenaming}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Rename view</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={onRename} className="space-y-3">
-            <Input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              aria-label="View name"
-              placeholder="View name"
-              autoFocus
-            />
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setRenaming(false)} disabled={pending}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={pending}>
-                Save
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete view</DialogTitle>
-            <DialogDescription>
-              Delete “{view.name}”? Issues in the workspace stay where they are.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} disabled={pending}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" onClick={() => void onDelete()} disabled={pending}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
 function NavLink({
   href,
   active,
@@ -700,83 +503,3 @@ function CreateProjectDialog({
 }
 
 const zName = z.string().trim().min(1, "Enter a project name").max(80, "Name is too long");
-const viewNameSchema = z.string().trim().min(1, "Enter a view name").max(80, "Name is too long");
-
-function CreateViewDialog({
-  open,
-  onOpenChange,
-  workspaceId,
-  onNavigate,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  workspaceId: Id<"workspaces">;
-  onNavigate?: () => void;
-}) {
-  const create = useMutation(api.views.create);
-  const router = useRouter();
-  const [name, setName] = useState("");
-  const [pending, setPending] = useState(false);
-
-  function close() {
-    setName("");
-    onOpenChange(false);
-  }
-
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    const parsed = viewNameSchema.safeParse(name);
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Enter a view name");
-      return;
-    }
-    setPending(true);
-    try {
-      const viewId = await create({
-        workspaceId,
-        name: parsed.data,
-      });
-      setName("");
-      onOpenChange(false);
-      onNavigate?.();
-      router.push(`/views/${viewId}`);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) close();
-        else onOpenChange(next);
-      }}
-    >
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>New view</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-3">
-          <Input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="View name"
-            aria-label="View name"
-            autoFocus
-          />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={close} disabled={pending}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
-              Create view
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}

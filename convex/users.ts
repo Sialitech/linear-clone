@@ -321,20 +321,6 @@ export const ensureWorkspace = zMutation({
         workspaceId,
       });
     }
-    await ctx.db.insert("views", {
-      name: "All issues",
-      workspaceId,
-      ownerId: userId,
-      assigneeMode: "anyone",
-      createdAt: now,
-    });
-    await ctx.db.insert("views", {
-      name: "My issues",
-      workspaceId,
-      ownerId: userId,
-      assigneeMode: "me",
-      createdAt: now,
-    });
     return workspaceId;
   },
 });

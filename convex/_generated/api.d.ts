@@ -28,7 +28,6 @@ import type * as lib_keys from "../lib/keys.js";
 import type * as model from "../model.js";
 import type * as projects from "../projects.js";
 import type * as users from "../users.js";
-import type * as views from "../views.js";
 import type * as webhooks from "../webhooks.js";
 
 import type {
@@ -58,7 +57,6 @@ declare const fullApi: ApiFromModules<{
   model: typeof model;
   projects: typeof projects;
   users: typeof users;
-  views: typeof views;
   webhooks: typeof webhooks;
 }>;
 

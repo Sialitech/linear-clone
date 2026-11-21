@@ -14,8 +14,6 @@ import {
   MEMBER_ROLES,
   PRIORITIES,
   PROJECT_STATUSES,
-  VIEW_GROUPS,
-  VIEW_ORDERS,
 } from "../model";
 
 export const zQuery = zCustomQuery(query, NoOp);
@@ -27,8 +25,6 @@ export const prioritySchema = z.enum(PRIORITIES);
 export const projectStatusSchema = z.enum(PROJECT_STATUSES);
 export const memberRoleSchema = z.enum(MEMBER_ROLES);
 export const assigneeModeSchema = z.enum(ASSIGNEE_MODES);
-export const viewGroupSchema = z.enum(VIEW_GROUPS);
-export const viewOrderSchema = z.enum(VIEW_ORDERS);
 export const cycleStatusSchema = z.enum(CYCLE_STATUSES);
 
 export const workspaceIdSchema = zid("workspaces");
@@ -37,7 +33,6 @@ export const issueIdSchema = zid("issues");
 export const userIdSchema = zid("users");
 export const labelIdSchema = zid("labels");
 export const commentIdSchema = zid("comments");
-export const viewIdSchema = zid("views");
 export const pullRequestIdSchema = zid("pullRequests");
 export const projectRepoIdSchema = zid("projectRepos");
 export const cycleIdSchema = zid("cycles");
