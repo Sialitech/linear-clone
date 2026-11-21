@@ -181,7 +181,7 @@ El peek y el compositor son **estado en memoria, no URL**: no sobreviven a una r
 - **Datos:** `useQuery(api.x.y, workspace ? { workspaceId: workspace._id } : "skip")`. `undefined` significa cargando (se pinta un skeleton) y `null`, no encontrado. Las consultas que no hacen falta todavía se pasan como `"skip"`.
 - **Mutaciones:** `try { await m(args) } catch (e) { toast.error(errorMessage(e)) }`. La validación en cliente usa Zod `safeParse`.
 - **Actualización optimista:** solo el tablero usa `withOptimisticUpdate`, y parchea la caché de `api.issues.list` con argumentos exactamente `{ workspaceId, projectId }`. Si cambias los argumentos de esa consulta en modo tablero, el arrastre deja de reflejarse al instante. En el resto se usa estado local con vuelta atrás si falla.
-- **Persistencia de opciones:** los filtros, la agrupación y el orden de la pantalla de proyecto son estado local (se pierden al salir). `localStorage` solo guarda el tema y el workspace.
+- **Persistencia de opciones:** los filtros, la agrupación y el orden de la pantalla de proyecto se guardan por proyecto en `localStorage["linear-clone:project-view:<id>"]` (lógica pura en `src/lib/project-view-prefs.ts`, que descarta valores inválidos; las etiquetas y miembros que ya no existen se quitan). La búsqueda no se guarda. `localStorage` guarda además el tema y el workspace.
 - **Tipos:** en `src/lib/types.ts`, derivados con `FunctionReturnType` de las consultas. No dupliques interfaces a mano.
 - **`"use client"`** en todo componente interactivo. `src/lib` son módulos puros sin React.
 
