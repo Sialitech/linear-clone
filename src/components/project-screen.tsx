@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { ISSUE_STATUSES, PRIORITIES, VIEW_GROUPS, VIEW_ORDERS } from "@convex/model";
 import { hasAnyFilter, toListFilters } from "@convex/lib/viewFilters";
 import {
   DEFAULT_DISPLAY,
@@ -20,11 +21,12 @@ import { useWorkspace } from "@/components/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { sortIssues } from "@/lib/issue-groups";
+import { parseProjectView, projectViewKey, pruneIds, serializeProjectView } from "@/lib/project-view-prefs";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import { LayoutGrid, List, Plus } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export default function ProjectScreen({
   projectId,
@@ -40,9 +42,51 @@ export default function ProjectScreen({
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   // Los proyectos arrancan ordenados por última actualización, como antes de tener opciones de display.
   const [display, setDisplay] = useState<DisplayState>({ ...DEFAULT_DISPLAY, orderBy: "updated" });
+  // Los filtros y el display se recuerdan por proyecto en este navegador. La búsqueda no.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const restored = loadedFor === projectId;
+  const members = useQuery(api.users.listMembers, workspace ? { workspaceId: workspace._id } : "skip");
+  const labels = useQuery(api.labels.list, workspace ? { workspaceId: workspace._id } : "skip");
+
+  useEffect(() => {
+    let raw: string | null = null;
+    try {
+      raw = window.localStorage.getItem(projectViewKey(projectId));
+    } catch {}
+    const stored = parseProjectView(raw, {
+      statuses: ISSUE_STATUSES,
+      priorities: PRIORITIES,
+      groups: VIEW_GROUPS,
+      orders: VIEW_ORDERS,
+    });
+    setFilters(stored ? ({ ...stored.filters, projectId: null } as FilterState) : EMPTY_FILTERS);
+    setDisplay(stored ? (stored.display as DisplayState) : { ...DEFAULT_DISPLAY, orderBy: "updated" });
+    setSearch("");
+    setLoadedFor(projectId);
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      window.localStorage.setItem(projectViewKey(projectId), serializeProjectView({ filters, display }));
+    } catch {}
+  }, [restored, projectId, filters, display]);
+
+  // Si una etiqueta se borró o un miembro salió, su filtro guardado ya no puede cumplirse.
+  useEffect(() => {
+    if (!restored || !members || !labels) return;
+    const memberIds = new Set<string>(members.map((m) => m._id));
+    const labelIds = new Set<string>(labels.map((l) => l._id));
+    const assignees = pruneIds(filters.assignees, memberIds, ["me", "unassigned"]);
+    const kept = pruneIds(filters.labelIds, labelIds);
+    if (assignees.length !== filters.assignees.length || kept.length !== filters.labelIds.length) {
+      setFilters((current) => ({ ...current, assignees, labelIds: kept }));
+    }
+  }, [restored, members, labels, filters.assignees, filters.labelIds]);
+
   const needsMe = filters.assignees.includes("me");
   const listArgs =
-    workspace && (!needsMe || me)
+    workspace && restored && (!needsMe || me)
       ? {
           workspaceId: workspace._id,
           projectId: id,
